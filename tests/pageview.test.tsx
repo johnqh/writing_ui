@@ -118,3 +118,58 @@ describe('useLayout', () => {
     expect(result.current.pages).toBe(settled);
   });
 });
+
+// One short sentence per dialogue line, so the sentence rule lets a speech break after any line.
+const SPEECH = Array.from({ length: 7 }, () => 'Hold the door and listen to me.').join(' ');
+const beats = (n: number): SeedElement[] => Array.from({ length: n }, (_, i) => ({ style: 'st_action', text: `Beat ${i}.` }));
+
+describe('PageView continueds and dual dialogue', () => {
+  it('draws (MORE) under a split speech and the synthesized cue atop the next page, neither clickable', async () => {
+    host = createMemoryHost({
+      seed: [{ style: 'st_scene_heading', text: 'int. station - night' }, ...beats(23), { style: 'st_character', text: 'Maya' }, { style: 'st_dialogue', text: SPEECH }],
+    });
+    const onRequestEdit = vi.fn();
+    const r = render(<PageView host={host} onRequestEdit={onRequestEdit} />);
+    await waitFor(() => expect(r.container.querySelectorAll('.wui-sheet').length).toBe(2));
+    const [p1, p2] = [...r.container.querySelectorAll<HTMLElement>('.wui-sheet')];
+    const more = p1!.querySelector<HTMLElement>('[data-kind="more"]')!;
+    expect(more.textContent).toBe('(MORE)');
+    const cue = p2!.querySelector<HTMLElement>('[data-kind="contdCue"]')!;
+    expect(cue.textContent).toBe("MAYA (CONT'D)");
+    expect(cue.style.top).toBe('1in'); // first line of the page
+    fireEvent.click(more);
+    fireEvent.click(cue);
+    expect(onRequestEdit).not.toHaveBeenCalled();
+    expect(p1!.querySelectorAll('.wui-pl').length + p2!.querySelectorAll('.wui-pl').length).toBe(1 + 23 + 1 + 7);
+  });
+
+  it('draws scene CONTINUED lines once the template flags are on', async () => {
+    host = createMemoryHost({ seed: [{ style: 'st_scene_heading', text: 'int. station - night' }, ...beats(40)] });
+    act(() => void host.execute([{ id: 'template.setContinueds', params: { sceneTop: true, sceneBottom: true } }]));
+    const r = render(<PageView host={host} />);
+    await waitFor(() => expect(r.container.querySelectorAll('.wui-sheet').length).toBeGreaterThan(1));
+    const [p1, p2] = [...r.container.querySelectorAll<HTMLElement>('.wui-sheet')];
+    expect(p1!.querySelector('[data-kind="continuedBottom"]')!.textContent).toBe('(CONTINUED)');
+    expect(p2!.querySelector('[data-kind="continuedTop"]')!.textContent).toBe('CONTINUED:');
+  });
+
+  it('draws a dual pair side by side: cues on the same line at different x', async () => {
+    host = createMemoryHost({
+      seed: [
+        { style: 'st_scene_heading', text: 'int. station - night' },
+        { style: 'st_character', text: 'Maya' }, { style: 'st_dialogue', text: 'Hold the door.' },
+        { style: 'st_character', text: 'Jonah' }, { style: 'st_dialogue', text: 'Not a chance.' },
+      ],
+    });
+    const second = host.model.elements()[3]!.id;
+    act(() => void host.execute([{ id: 'dual.make', params: { element: second } }]));
+    const r = render(<PageView host={host} />);
+    await waitFor(() => expect(r.container.querySelector('[data-dual-side="right"]')).not.toBeNull());
+    const left = r.container.querySelector<HTMLElement>('.wui-pl[data-dual-side="left"]')!;
+    const right = r.container.querySelector<HTMLElement>('.wui-pl[data-dual-side="right"]')!;
+    expect(left.textContent).toBe('MAYA');
+    expect(right.textContent).toBe('JONAH');
+    expect(right.style.top).toBe(left.style.top);
+    expect(parseFloat(right.style.left)).toBeGreaterThan(parseFloat(left.style.left) + 1);
+  });
+});

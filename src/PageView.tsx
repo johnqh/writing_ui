@@ -43,6 +43,31 @@ function runCss(run: GlyphRun, lineX: number): CSSProperties {
   return css;
 }
 
+/** Generated lines — `(MORE)`, synthesized `NAME (CONT'D)` cues, scene CONTINUED — are drawn but never editable or clickable. */
+const GeneratedLine = memo(function GeneratedLine({ line }: { line: DocLine }) {
+  return (
+    <div
+      className={`wui-gl wui-gl-${line.kind}`}
+      data-kind={line.kind}
+      data-gen-el={line.elementId}
+      data-dual-side={line.dualSide ?? undefined}
+      style={{
+        left: `${emuToIn(line.x)}in`,
+        top: `${emuToIn(line.y)}in`,
+        width: `${emuToIn(Math.max(line.width, 914400 / 4))}in`,
+        height: `${emuToIn(line.pitch)}in`,
+        lineHeight: `${emuToIn(line.pitch)}in`,
+      }}
+    >
+      {line.runs.map((r, i) => (
+        <span key={i} style={runCss(r, line.x)}>
+          {r.text}
+        </span>
+      ))}
+    </div>
+  );
+});
+
 const Line = memo(function Line({ line }: { line: DocLine }) {
   const chars = line.runs.reduce((n, r) => n + r.text.length, 0);
   const last = line.runs[line.runs.length - 1];
@@ -51,6 +76,7 @@ const Line = memo(function Line({ line }: { line: DocLine }) {
     <div
       className="wui-pl"
       data-el-id={line.elementId}
+      data-dual-side={line.dualSide ?? undefined}
       data-line={line.lineIndexInElement}
       data-start={line.sourceStart}
       data-end={line.sourceEnd}
@@ -136,7 +162,13 @@ const Sheet = memo(function Sheet({ page, width, height }: { page: DocPage; widt
       ))}
       {title
         ? page.lines.map((l, i) => <TitleLine key={`${l.elementId}:${l.lineIndexInElement}:${i}`} line={l} />)
-        : page.lines.map((l, i) => <Line key={`${l.elementId}:${l.lineIndexInElement}:${i}`} line={l} />)}
+        : page.lines.map((l, i) =>
+            l.kind === 'text' ? (
+              <Line key={`${l.elementId}:${l.lineIndexInElement}:${i}`} line={l} />
+            ) : (
+              <GeneratedLine key={`${l.kind}:${l.elementId}:${i}`} line={l} />
+            ),
+          )}
     </section>
   );
 });

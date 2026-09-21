@@ -107,6 +107,7 @@
   letter-spacing: 0;
 }
 .wui-pl { position: absolute; white-space: pre; cursor: text; font-family: "Courier Prime", "Courier New", Courier, monospace; }
+.wui-gl { position: absolute; white-space: pre; cursor: default; user-select: none; font-family: "Courier Prime", "Courier New", Courier, monospace; }
 .wui-pl:hover { background: rgba(37, 99, 235, 0.07); }
 .wui-deco,
 .wui-tl {
