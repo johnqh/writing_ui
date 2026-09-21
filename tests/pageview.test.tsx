@@ -172,4 +172,23 @@ describe('PageView continueds and dual dialogue', () => {
     expect(right.style.top).toBe(left.style.top);
     expect(parseFloat(right.style.left)).toBeGreaterThan(parseFloat(left.style.left) + 1);
   });
+
+  it('draws revision asterisks in the margin, the coloured header label and a page band; the Edit view shows a bar', async () => {
+    host = createMemoryHost({ seed: longScript(12) });
+    const run = (id: string, params: unknown) => act(() => void host.execute([{ id, params }]));
+    run('revision.setCurrent', { date: Date.UTC(2026, 8, 21) });
+    run('revision.mode', { on: true });
+    const target = host.model.elements()[5]!.id;
+    run('text.insert', { at: { elementId: target, offset: 0 }, text: 'X' });
+    const r = render(<PageView host={host} />);
+    await waitFor(() => expect(r.container.querySelectorAll('[data-testid="rev-mark"]').length).toBe(1));
+    const mark = r.container.querySelector<HTMLElement>('[data-testid="rev-mark"]')!;
+    expect(mark.textContent).toBe('*');
+    expect(mark.closest<HTMLElement>('.wui-pl')!.dataset.elId).toBe(String(target));
+    const sheet = mark.closest<HTMLElement>('.wui-sheet')!;
+    expect(sheet.querySelector('[data-deco="revision"]')!.textContent).toBe('Blue Revised 9/21/26');
+    expect(sheet.querySelector('[data-testid="rev-band"]')).not.toBeNull();
+    const others = [...r.container.querySelectorAll<HTMLElement>('.wui-sheet')].filter((x) => x !== sheet);
+    expect(others.every((x) => !x.querySelector('[data-deco="revision"]') && !x.querySelector('[data-testid="rev-mark"]'))).toBe(true);
+  });
 });

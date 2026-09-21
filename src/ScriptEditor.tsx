@@ -198,6 +198,8 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
     return out;
   })();
   const only = elements.length === 1;
+  const revState = model.revisionState();
+  const revKey = `${revState.display}:${revState.sets.length}`;
 
   return (
     <div ref={setContainer} className={['wui-editor', className].filter(Boolean).join(' ')} data-testid="script-editor">
@@ -225,7 +227,7 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
                 key={`${id}:${nonce}`}
                 model={model}
                 id={id}
-                vkey={`${model.textVersion(v.id)}.${model.attrsVersion(v.id)}.${epoch.current}`}
+                vkey={`${model.textVersion(v.id)}.${model.attrsVersion(v.id)}.${epoch.current}.${revKey}`}
                 linesPerInch={geo.linesPerInch}
                 frozen={composingId.current === id}
                 sceneNum={sceneNums.get(id) ?? null}

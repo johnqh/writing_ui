@@ -284,3 +284,18 @@ describe('scene number gutter', () => {
     expect(r.container.querySelector('[data-scene-num]')?.getAttribute('data-scene-num')).toBe('1');
   });
 });
+
+describe('revisions', () => {
+  it('a revised element carries a coloured bar (data-rev-set) while revision display is on', () => {
+    mount();
+    const run = (id: string, params: unknown) => act(() => void host.execute([{ id, params }]));
+    run('revision.setCurrent', {});
+    run('revision.mode', { on: true });
+    run('text.insert', { at: { elementId: ids()[0]!, offset: 0 }, text: 'Z' });
+    const block = page.querySelector<HTMLElement>(`[data-el-id="${ids()[0]}"]`)!;
+    expect(block.dataset.revSet).toBeTruthy();
+    expect(block.style.getPropertyValue('--wui-rev-color')).toBe('#0000FF');
+    run('revision.setDisplay', { display: 'none' });
+    expect(page.querySelector<HTMLElement>(`[data-el-id="${ids()[0]}"]`)!.dataset.revSet).toBeUndefined();
+  });
+});

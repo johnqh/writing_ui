@@ -97,6 +97,16 @@ const Line = memo(function Line({ line }: { line: DocLine }) {
           {r.text}
         </span>
       ))}
+      {line.revisionMark && (
+        <span
+          className="wui-rev-mark"
+          data-testid="rev-mark"
+          data-rev-set={line.revisionMark.setId}
+          style={{ left: `${emuToIn(line.revisionMark.x - line.x)}in`, color: line.revisionMark.color, ...(line.runs[0] ? { fontFamily: FAMILY_CSS[line.runs[0].faceId.split(':')[0] ?? ''] ?? 'inherit', fontSize: `${(emuToIn(line.runs[0].sizeEmu) * 72).toFixed(3)}pt` } : {}) }}
+        >
+          {line.revisionMark.text}
+        </span>
+      )}
     </div>
   );
 });
@@ -114,6 +124,7 @@ const Deco = memo(function Deco({ d }: { d: DocDecoration }) {
         width: `${emuToIn(Math.max(d.width, 914400 / 4))}in`,
         height: `${emuToIn(d.pitch)}in`,
         lineHeight: `${emuToIn(d.pitch)}in`,
+        ...(d.color ? { color: d.color } : {}),
       }}
     >
       {d.runs.map((r, i) => (
@@ -155,8 +166,11 @@ const Sheet = memo(function Sheet({ page, width, height }: { page: DocPage; widt
       className={title ? 'wui-sheet wui-sheet-title' : 'wui-sheet'}
       data-page={title ? 'title' : page.number}
       data-testid={title ? 'title-page' : undefined}
+      {...(page.revisionSetId ? { 'data-rev-set': page.revisionSetId } : {})}
+      {...(page.revisionLabel ? { 'data-rev-label': page.revisionLabel } : {})}
       style={{ width: `${emuToIn(width)}in`, height: `${emuToIn(height)}in` }}
     >
+      {page.pageColor && <div className="wui-rev-band" data-testid="rev-band" style={{ background: page.pageColor }} />}
       {page.decorations.map((d, i) => (
         <Deco key={`${d.kind}:${d.slot}:${d.elementId ?? ''}:${i}`} d={d} />
       ))}

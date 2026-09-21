@@ -1,5 +1,5 @@
 import { memo, type ReactNode } from 'react';
-import type { DocumentModel } from '@sudobility/writing_core';
+import { elementRevisionMarks, type DocumentModel } from '@sudobility/writing_core';
 import { EL_ATTR } from './dom-positions';
 import { blockStyle, runStyle } from './geometry';
 
@@ -23,6 +23,21 @@ function ElementBlockImpl({ model, id, linesPerInch, placeholder, sceneNum }: El
   const text = view.text;
   const empty = text.plain.length === 0;
   const omitted = view.omit !== null || view.sceneOmit !== null;
+  // Revision bar (Edit view): the colour of the highest set marking this element, when revision display is on.
+  const revState = model.revisionState();
+  let revColor: string | null = null;
+  let revSet: string | null = null;
+  if (revState.display !== 'none') {
+    let best = -1;
+    for (const m of elementRevisionMarks(view)) {
+      const at = revState.sets.findIndex((x) => x.id === m.setId);
+      if (at > best) best = at;
+    }
+    if (best >= 0) {
+      revSet = String(revState.sets[best]!.id);
+      revColor = revState.sets[best]!.textColor;
+    }
+  }
   const cls = [
     'wui-el',
     `wui-role-${rs.role}`,
@@ -53,7 +68,8 @@ function ElementBlockImpl({ model, id, linesPerInch, placeholder, sceneNum }: El
       {...(omitted && rs.role === 'sceneHeading' ? { 'data-omitted-heading': '' } : {})}
       {...(view.dual ? { 'data-dual': view.dual.side } : {})}
       {...(placeholder && empty ? { 'data-placeholder': placeholder, 'data-empty': '' } : {})}
-      style={blockStyle(rs, linesPerInch)}
+      {...(revSet ? { 'data-rev-set': revSet } : {})}
+      style={revColor ? { ...blockStyle(rs, linesPerInch), ['--wui-rev-color' as string]: revColor } : blockStyle(rs, linesPerInch)}
     >
       {children}
     </div>

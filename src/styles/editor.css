@@ -66,6 +66,8 @@
   user-select: none;
   pointer-events: none;
 }
+/* Revision bar: a thin bar in the set's colour to the left of any element holding a revised run or deletion. */
+.wui-el[data-rev-set] { box-shadow: -4px 0 0 0 var(--wui-rev-color, #2563eb); }
 .wui-el.wui-omitted { text-decoration: line-through; }
 .wui-el.wui-omitted > span { opacity: 0.45; }
 /* An omitted scene's heading carries an OMITTED badge (out of flow, so the strike-through does not reach it). */
@@ -147,6 +149,11 @@
   pointer-events: none;
   font-family: "Courier Prime", "Courier New", Courier, monospace;
 }
+
+/* Revision display (page view): margin asterisks, a tinted band at the top of a revised page, the coloured header label. */
+.wui-rev-mark { position: absolute; top: 0; white-space: pre; pointer-events: none; font-weight: 700; user-select: none; }
+.wui-rev-band { position: absolute; left: 0; right: 0; top: 0; height: 0.16in; pointer-events: none; }
+.wui-deco-revision { font-weight: 700; }
 
 @media print {
   @page { size: letter; margin: 0; }
