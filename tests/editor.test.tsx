@@ -1,0 +1,277 @@
+import { act, cleanup, render } from '@testing-library/react';
+import * as Y from 'yjs';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createMemoryHost, type MemoryHost } from '../demo/memory-host';
+import { readDomSelection, writeDomSelection } from '../src/dom-positions';
+import { ScriptEditor } from '../src/ScriptEditor';
+
+let host: MemoryHost;
+let page: HTMLElement;
+
+const ids = () => host.model.elements().map((e) => String(e.id));
+const plain = (i: number) => host.model.elementAt(i).text.plain;
+const styleOf = (i: number) => String(host.model.elementAt(i).style);
+const caret = () => {
+  const s = readDomSelection(page);
+  return s ? { anchor: s.anchor, head: s.head } : null;
+};
+
+function mount(h = createMemoryHost(), props: { readOnly?: boolean } = {}) {
+  host = h;
+  const r = render(<ScriptEditor host={host} {...props} />);
+  page = r.container.querySelector('.wui-page') as HTMLElement;
+  return r;
+}
+
+function select(a: [number, number], b: [number, number] = a) {
+  const all = ids();
+  act(() => {
+    writeDomSelection(page, { elementId: all[a[0]]!, offset: a[1] }, { elementId: all[b[0]]!, offset: b[1] });
+  });
+}
+
+function input(inputType: string, data: string | null = null) {
+  const ev = new InputEvent('beforeinput', { inputType, data, cancelable: true, bubbles: true });
+  act(() => void page.dispatchEvent(ev));
+  return ev;
+}
+
+function key(k: string, init: KeyboardEventInit = {}) {
+  const ev = new KeyboardEvent('keydown', { key: k, cancelable: true, bubbles: true, ...init });
+  act(() => void page.dispatchEvent(ev));
+  return ev;
+}
+
+const at = (i: number, offset: number) => ({ elementId: ids()[i]!, offset });
+
+beforeEach(() => {
+  document.getSelection()?.removeAllRanges();
+});
+afterEach(() => {
+  cleanup();
+  host?.dispose();
+});
+
+describe('yjs', () => {
+  it('a writing_core document is an instance of the Yjs this package imports', () => {
+    const h = createMemoryHost();
+    expect(h.doc instanceof Y.Doc).toBe(true);
+    h.dispose();
+  });
+});
+
+describe('rendering', () => {
+  it('renders one block per element with style classes and template geometry', () => {
+    mount();
+    const blocks = page.querySelectorAll('[data-el-id]');
+    expect(blocks.length).toBe(4);
+    expect(blocks[0]!.className).toContain('wui-role-sceneHeading');
+    expect(blocks[2]!.className).toContain('wui-role-character');
+    expect((blocks[0] as HTMLElement).style.textTransform).toBe('uppercase');
+    // Character: 2.0in left indent, 0.25in right (914 400 EMU per inch).
+    expect((blocks[2] as HTMLElement).style.marginLeft).toBe('2in');
+    expect((blocks[2] as HTMLElement).style.marginRight).toBe('0.25in');
+    // Text column: 8.5in page minus 1.5in and 1in margins.
+    expect(page.style.width).toBe('6in');
+    expect(blocks[0]!.textContent).toBe('int. writers room - night');
+  });
+
+  it('shows a placeholder for an empty document and read-only disables input', () => {
+    const h = createMemoryHost({ seed: [] });
+    mount(h, { readOnly: true });
+    expect(page.querySelector('[data-empty-document]')).not.toBeNull();
+    expect(page.getAttribute('contenteditable')).toBe('false');
+    expect(host.model.elementCount()).toBe(0);
+    input('insertText', 'x');
+    expect(host.model.elementCount()).toBe(0);
+  });
+
+  it('typing into an empty document creates the first element', () => {
+    mount(createMemoryHost({ seed: [] }));
+    act(() => void (page.querySelector('.wui-el') as HTMLElement).focus());
+    act(() => void document.getSelection()!.setBaseAndExtent(page, 0, page, 0));
+    input('insertText', 'H');
+    expect(host.model.elementCount()).toBe(1);
+    expect(plain(0)).toBe('H');
+    expect(caret()!.head).toEqual(at(0, 1));
+  });
+});
+
+describe('input', () => {
+  it('typing a character updates the model and keeps the caret after it', () => {
+    mount();
+    select([1, 5]);
+    const ev = input('insertText', 'X');
+    expect(ev.defaultPrevented).toBe(true);
+    expect(plain(1).slice(0, 12)).toBe('A sinXgle la');
+    expect(caret()!.head).toEqual(at(1, 6));
+    input('insertText', 'Y');
+    expect(plain(1).slice(0, 8)).toBe('A sinXYg');
+    expect(caret()!.head).toEqual(at(1, 7));
+  });
+
+  it('typing replaces a selection within one element', () => {
+    mount();
+    select([2, 0], [2, 3]);
+    input('insertText', 'Z');
+    expect(plain(2)).toBe('Za');
+    expect(caret()!.head).toEqual(at(2, 1));
+  });
+
+  it('Enter at the end of a scene heading creates the template next style; the caret moves to it', () => {
+    mount();
+    select([0, plain(0).length]);
+    input('insertParagraph');
+    expect(host.model.elementCount()).toBe(5);
+    expect(styleOf(1)).toBe('st_action');
+    expect(plain(1)).toBe('');
+    expect(caret()!.head).toEqual(at(1, 0));
+    // Character then dialogue, following the flow rules.
+    select([3, plain(3).length]);
+    input('insertParagraph');
+    expect(styleOf(4)).toBe('st_dialogue');
+    expect(caret()!.head).toEqual(at(4, 0));
+  });
+
+  it('Enter mid-element splits it and puts the caret at the start of the tail', () => {
+    mount();
+    select([3, 6]);
+    input('insertParagraph');
+    expect(host.model.elementCount()).toBe(5);
+    expect(plain(3)).toBe('Twelve');
+    expect(plain(4)).toBe(' drafts. Not one of them knows how it ends.');
+    expect(caret()!.head).toEqual(at(4, 0));
+  });
+
+  it('Backspace at an element start merges into the previous element with the caret at the join', () => {
+    mount();
+    const prevLen = plain(2).length;
+    select([3, 0]);
+    input('deleteContentBackward');
+    expect(host.model.elementCount()).toBe(3);
+    expect(plain(2)).toBe('Maya' + 'Twelve drafts. Not one of them knows how it ends.');
+    expect(caret()!.head).toEqual(at(2, prevLen));
+  });
+
+  it('Backspace inside text deletes one character and moves the caret back', () => {
+    mount();
+    select([3, 6]);
+    input('deleteContentBackward');
+    expect(plain(3).slice(0, 8)).toBe('Twelv dr');
+    expect(caret()!.head).toEqual(at(3, 5));
+  });
+
+  it('a cross-element selection is deleted by typing over it', () => {
+    mount();
+    select([2, 2], [3, 6]);
+    input('insertText', '!');
+    // Character and Dialogue differ in style, so the engine trims both ends but does not join them.
+    expect(host.model.elementCount()).toBe(4);
+    expect(plain(2)).toBe('Ma!');
+    expect(plain(3)).toBe(' drafts. Not one of them knows how it ends.');
+    expect(caret()!.head).toEqual(at(2, 3));
+  });
+
+  it('Cmd+B toggles bold on a selection and keeps the selection', () => {
+    mount();
+    select([3, 0], [3, 6]);
+    key('b', { metaKey: true });
+    const runs = host.model.elementAt(3).text.runs;
+    expect(runs[0]!.text).toBe('Twelve');
+    expect(runs[0]!.attrs).toMatchObject({ b: true });
+    expect(page.querySelector('[data-el-id]:nth-child(4) span')!.getAttribute('style')).toContain('font-weight: 700');
+    expect(caret()).toEqual({ anchor: at(3, 0), head: at(3, 6) });
+    input('formatBold');
+    expect(host.model.elementAt(3).text.runs[0]!.attrs).not.toHaveProperty('b');
+  });
+
+  it('paste inserts plain text and splits on newlines using the template flow', () => {
+    mount();
+    select([1, plain(1).length]);
+    const ev = new InputEvent('beforeinput', { inputType: 'insertFromPaste', data: 'ONE\nTWO', cancelable: true, bubbles: true });
+    act(() => void page.dispatchEvent(ev));
+    expect(plain(1).endsWith('ONE')).toBe(true);
+    expect(plain(2)).toBe('TWO');
+    expect(caret()!.head).toEqual(at(2, 3));
+  });
+
+  it('Tab on an empty element cycles its style; Cmd+1 applies the style with that shortcut', () => {
+    mount();
+    select([0, plain(0).length]);
+    input('insertParagraph'); // empty action
+    expect(styleOf(1)).toBe('st_action');
+    key('Tab'); // action tab-empty -> character
+    expect(styleOf(1)).toBe('st_character');
+    expect(caret()!.head).toEqual(at(1, 0));
+    key('1', { metaKey: true });
+    expect(styleOf(1)).toBe('st_scene_heading');
+  });
+
+  it('undo reverts typing and puts the caret back; redo reapplies it', () => {
+    mount();
+    select([3, 6]);
+    input('insertText', 'Q');
+    expect(plain(3).slice(0, 8)).toBe('TwelveQ ');
+    expect(caret()!.head).toEqual(at(3, 7));
+    key('z', { metaKey: true });
+    expect(plain(3).slice(0, 8)).toBe('Twelve d');
+    expect(caret()!.head).toEqual(at(3, 6));
+    key('z', { metaKey: true, shiftKey: true });
+    expect(plain(3).slice(0, 8)).toBe('TwelveQ ');
+    expect(caret()!.head).toEqual(at(3, 7));
+  });
+
+  it('undo of Enter removes the new element and returns the caret to the split point', () => {
+    mount();
+    select([3, 6]);
+    input('insertParagraph');
+    expect(host.model.elementCount()).toBe(5);
+    input('historyUndo');
+    expect(host.model.elementCount()).toBe(4);
+    expect(plain(3).slice(0, 12)).toBe('Twelve draft');
+    expect(caret()!.head).toEqual(at(3, 6));
+  });
+});
+
+describe('composition', () => {
+  it('applies the composed text on compositionend and leaves the DOM alone until then', () => {
+    mount();
+    select([3, 6]);
+    act(() => void page.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true })));
+    // The browser mutates the composing element's text natively.
+    const block = page.querySelectorAll('[data-el-id]')[3]!;
+    const textNode = block.firstChild!.firstChild as Text;
+    act(() => {
+      textNode.data = 'Twelve' + '漢字' + textNode.data.slice(6);
+    });
+    // beforeinput during composition is not cancelled.
+    const ev = new InputEvent('beforeinput', { inputType: 'insertCompositionText', data: '漢字', cancelable: true, bubbles: true, isComposing: true });
+    act(() => void page.dispatchEvent(ev));
+    expect(ev.defaultPrevented).toBe(false);
+    expect(plain(3).slice(0, 8)).toBe('Twelve d');
+    act(() => void page.dispatchEvent(new CompositionEvent('compositionend', { data: '漢字', bubbles: true })));
+    expect(plain(3).slice(0, 10)).toBe('Twelve漢字 d');
+    expect(caret()!.head).toEqual(at(3, 8));
+    expect(page.querySelectorAll('[data-el-id]')[3]!.textContent!.slice(0, 10)).toBe('Twelve漢字 d');
+  });
+});
+
+describe('remote cursors and local cursor', () => {
+  it('renders a labelled overlay caret for a remote cursor', () => {
+    mount();
+    act(() => {
+      host.setRemoteCursors([{ clientId: 7, user: { id: 'u', name: 'Sam', color: '#e11d48' }, cursor: { anchor: at(3, 4), head: at(3, 4) } }]);
+    });
+    const el = document.querySelector('[data-remote-cursor="7"]');
+    expect(el).not.toBeNull();
+    expect(el!.textContent).toBe('Sam');
+  });
+
+  it('publishes the local selection through setLocalCursor', async () => {
+    mount();
+    select([3, 2], [3, 5]);
+    act(() => void document.dispatchEvent(new Event('selectionchange')));
+    await new Promise((r) => setTimeout(r, 150));
+    expect(host.lastCursor).toEqual({ anchor: at(3, 2), head: at(3, 5) });
+  });
+});

@@ -1,0 +1,6 @@
+html, body, #root { height: 100%; margin: 0; }
+body { font: 14px system-ui, sans-serif; background: #f4f4f2; }
+.demo { display: flex; flex-direction: column; height: 100%; }
+.demo-bar { display: flex; gap: 12px; align-items: center; padding: 8px 16px; background: #fff; border-bottom: 1px solid #ddd; flex-wrap: wrap; }
+.demo-main { flex: 1; min-height: 0; }
+.demo-count { margin-left: auto; color: #777; }
