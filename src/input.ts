@@ -1,5 +1,6 @@
 import { registerBuiltinCommands, type BatchResult, type CommandInvocation, type DocumentModel, type ElementView, type WireDocPos } from '@sudobility/writing_core';
 import { EL_ATTR, findBlock, plainToYIndex, readDomSelection, type DomSelection } from './dom-positions';
+import { wuiDebug } from './debug';
 import type { PlainPos, ScriptEditorHost } from './host';
 
 registerBuiltinCommands();
@@ -46,6 +47,7 @@ export function createInputController(env: InputEnv) {
   }
 
   function exec(cmds: CommandInvocation[], kind: 'local-typing' | 'local-command', groupKey?: string): BatchResult {
+    wuiDebug('exec', { cmds: cmds.map((c) => c.id), kind });
     return env.host().execute(cmds, { kind, ...(groupKey ? { groupKey } : {}) });
   }
 
@@ -276,6 +278,7 @@ export function createInputController(env: InputEnv) {
   // ─── DOM event entry points ───────────────────────────────────────────────
 
   function onBeforeInput(e: InputEvent): void {
+    wuiDebug('beforeinput', { inputType: e.inputType, data: e.data ?? null });
     if (composing || e.isComposing) return; // the browser owns the composing element
     e.preventDefault();
     if (env.readOnly()) return;
@@ -340,6 +343,7 @@ export function createInputController(env: InputEnv) {
   }
 
   function onKeyDown(e: KeyboardEvent): void {
+    wuiDebug('keydown', { key: e.key, meta: e.metaKey, ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey });
     if (e.isComposing || e.keyCode === 229 || composing) return;
     if (env.readOnly()) return;
     const mod = e.metaKey || e.ctrlKey;

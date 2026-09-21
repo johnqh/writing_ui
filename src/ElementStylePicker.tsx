@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { wuiDebug } from './debug';
 import type { ScriptEditorHost } from './host';
 import { getSelectionStore, useEditorSelection } from './selection-store';
 
@@ -27,6 +28,7 @@ export function ElementStylePicker({ host, className, disabled }: ElementStylePi
   const value = current.size === 1 ? String([...current][0]) : current.size > 1 ? '__mixed' : '';
 
   const apply = (styleId: string) => {
+    wuiDebug('picker-change', { styleId, ids: ids.map(String) });
     if (!styleId || styleId === '__mixed' || ids.length === 0) return;
     host.execute([{ id: 'element.setStyle', params: { elements: ids, style: styleId } }], { kind: 'local-command' });
     getSelectionStore(host).focusEditor?.();
