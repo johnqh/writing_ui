@@ -51,6 +51,7 @@ const GeneratedLine = memo(function GeneratedLine({ line }: { line: DocLine }) {
       data-kind={line.kind}
       data-gen-el={line.elementId}
       data-dual-side={line.dualSide ?? undefined}
+      data-column={line.column ? line.column : undefined}
       style={{
         left: `${emuToIn(line.x)}in`,
         top: `${emuToIn(line.y)}in`,
@@ -77,6 +78,7 @@ const Line = memo(function Line({ line }: { line: DocLine }) {
       className="wui-pl"
       data-el-id={line.elementId}
       data-dual-side={line.dualSide ?? undefined}
+      data-column={line.column ? line.column : undefined}
       data-line={line.lineIndexInElement}
       data-start={line.sourceStart}
       data-end={line.sourceEnd}

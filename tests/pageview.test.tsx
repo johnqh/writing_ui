@@ -192,3 +192,42 @@ describe('PageView continueds and dual dialogue', () => {
     expect(others.every((x) => !x.querySelector('[data-deco="revision"]') && !x.querySelector('[data-testid="rev-mark"]'))).toBe(true);
   });
 });
+
+describe('PageView column rows and panels', () => {
+  it('draws AV video beside audio: same top, the audio column to the right, each at the engine x', async () => {
+    host = createMemoryHost({
+      templateKey: 'av-two-column',
+      seed: [
+        { style: 'st_scene_heading', text: 'int. studio - day' },
+        { style: 'st_action', text: 'Wide shot of the floor.' },
+        { style: 'st_character', text: 'Host' }, { style: 'st_dialogue', text: 'Welcome to the show.' },
+        { style: 'st_action', text: 'Cut to the guest.' }, { style: 'st_character', text: 'Guest' },
+      ],
+    });
+    const r = render(<PageView host={host} />);
+    await waitFor(() => expect(r.container.querySelector('.wui-pl[data-column="2"]')).not.toBeNull());
+    const video = r.container.querySelector<HTMLElement>('.wui-pl[data-column="1"]')!;
+    const audio = r.container.querySelector<HTMLElement>('.wui-pl[data-column="2"]')!;
+    expect(video.textContent).toBe('Wide shot of the floor.');
+    expect(audio.textContent).toBe('HOST');
+    expect(audio.style.top).toBe(video.style.top);
+    expect(parseFloat(audio.style.left)).toBeGreaterThan(parseFloat(video.style.left) + 2);
+    // The action after the dialogue drops below the first row and pairs with the next cue.
+    const video2 = [...r.container.querySelectorAll<HTMLElement>('.wui-pl[data-column="1"]')][1]!;
+    expect(parseFloat(video2.style.top)).toBeGreaterThan(parseFloat(video.style.top) + 0.5);
+  });
+
+  it('draws graphic-novel page and panel headings with their generated numbers', async () => {
+    host = createMemoryHost({
+      templateKey: 'graphic-novel',
+      seed: [
+        { style: 'st_page', text: '' }, { style: 'st_panel', text: '' }, { style: 'st_action', text: 'A rainy street.' },
+        { style: 'st_panel', text: 'Close.' }, { style: 'st_page', text: '' }, { style: 'st_panel', text: '' },
+      ],
+    });
+    const r = render(<PageView host={host} />);
+    await waitFor(() => expect(r.container.querySelectorAll('.wui-sheet').length).toBe(2));
+    const texts = [...r.container.querySelectorAll<HTMLElement>('.wui-pl')].map((e) => e.textContent);
+    expect(texts).toEqual(['PAGE ONE (TWO PANELS)', 'Panel 1.', 'A rainy street.', 'Panel 2. Close.', 'PAGE TWO (ONE PANELS)', 'Panel 1.']);
+  });
+});

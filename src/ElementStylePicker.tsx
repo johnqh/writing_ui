@@ -1,3 +1,4 @@
+import { resolveStyle } from '@sudobility/writing_core';
 import { useMemo } from 'react';
 import { wuiDebug } from './debug';
 import type { ScriptEditorHost } from './host';
@@ -8,6 +9,15 @@ export interface ElementStylePickerProps {
   className?: string;
   /** Re-render trigger from the parent is not needed: the picker reads the model on every selection change. */
   disabled?: boolean;
+}
+
+/** A style's column (§16): 1 or 2 in AV / BBC templates, where the style is what puts an element in a column; 0 otherwise. */
+function columnOf(template: ReturnType<ScriptEditorHost['model']['template']>, styleId: string): 0 | 1 | 2 {
+  try {
+    return resolveStyle(template, styleId as never).column;
+  } catch {
+    return 0;
+  }
 }
 
 /** Lists the template's styles, shows the current element's style and applies a choice to the selected element(s). */
@@ -47,8 +57,9 @@ export function ElementStylePicker({ host, className, disabled }: ElementStylePi
       {value === '' && <option value="">—</option>}
       {value === '__mixed' && <option value="__mixed">Mixed</option>}
       {styles.map((s) => (
-        <option key={s.id} value={s.id}>
+        <option key={s.id} value={s.id} data-column={columnOf(model.template(), s.id) || undefined}>
           {s.name}
+          {columnOf(model.template(), s.id) ? ` · column ${columnOf(model.template(), s.id)}` : ''}
           {s.shortcut !== null ? ` (⌘${s.shortcut})` : ''}
         </option>
       ))}
