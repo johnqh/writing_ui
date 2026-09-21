@@ -16,6 +16,7 @@ React web editor components for Fadewright: `ScriptEditor` (speed view) and `Ele
 - `src/dom-positions.ts` — DOM point <-> (element id, plain offset); plain offset <-> Y.Text index (embeds).
 - `src/ElementBlock.tsx` — one memoised block per element, keyed `(id, textVersion.attrsVersion.templateEpoch)`.
 - `src/geometry.ts` — template EMU to CSS inches, `ResolvedStyle` to inline style.
+- `src/PageView.tsx`, `src/useLayout.ts`, `src/layout-engine.ts` — read-only page view: `layoutDocument` pages as 8.5x11 sheets, one absolutely positioned element per line (Courier Prime, engine x/y), click a line -> `onRequestEdit(elementId, offset)`. `useLayout(host)` debounces (150 ms trailing), skips unchanged versions, and loads the engine through a dynamic `import('./layout-engine')` (writing_core's font tables are ~10 MB; the app's Vite config marks `writing_core/src/{fonts,layout}` side-effect free so they stay out of the initial chunk). Page number is a plain "N." on pages 2+ (engine runs no headers yet). `ScriptEditor` takes `initialCaret` to land the caret after a click from the page view. Editing in the page view is deferred (hidden-sink design).
 - `src/RemoteCursors.tsx`, `src/ElementStylePicker.tsx`, `src/selection-store.ts` (shares selection with the picker via a per-host WeakMap).
 - `demo/` — Vite demo plus `memory-host.ts`, an in-memory host (executor + session undo + subscription). Tests reuse it.
 - `assets/fonts/` — Courier Prime (SIL OFL, `OFL.txt`); 12 pt advances exactly 0.1 in (10 cpi).

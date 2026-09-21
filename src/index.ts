@@ -5,3 +5,5 @@ export type {
   ScriptEditorHost, HostExecuteOptions, RemoteCursorInfo, EditorCursor, PlainPos, Unsubscribe,
 } from './host';
 export { emuToIn, pageGeometry, blockStyle } from './geometry';
+export { PageView, type PageViewProps } from './PageView';
+export { useLayout, loadLayoutEngine, type UseLayoutResult, type UseLayoutOptions, type LayoutStatus } from './useLayout';

@@ -14,6 +14,8 @@ export interface ScriptEditorProps {
   className?: string;
   /** Shown in an empty document. */
   placeholder?: string;
+  /** Put the caret here (and focus the editor, scrolled into view) when this prop is set/changes: used when switching in from the page view. */
+  initialCaret?: PlainPos | null;
 }
 
 const CURSOR_THROTTLE_MS = 100;
@@ -23,7 +25,7 @@ const CURSOR_THROTTLE_MS = 100;
  * into a `writing_core` command, and the DOM is re-rendered from the read model. The caret is restored after
  * every render from `pendingSel` (see CLAUDE.md, "caret restoration rule").
  */
-export function ScriptEditor({ host, readOnly = false, className, placeholder = 'Start writing…' }: ScriptEditorProps) {
+export function ScriptEditor({ host, readOnly = false, className, placeholder = 'Start writing…', initialCaret = null }: ScriptEditorProps) {
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const [geoTick, bumpGeo] = useReducer((n: number) => n + 1, 0);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -90,6 +92,17 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
     writeDomSelection(page, want.anchor, want.head);
     getSelectionStore(hostRef.current).set(want);
   });
+
+  // A caret requested from outside (page view click): focus, select, and bring the element into view.
+  useLayoutEffect(() => {
+    const page = pageRef.current;
+    if (!initialCaret || !page) return;
+    page.focus({ preventScroll: true });
+    writeDomSelection(page, initialCaret, initialCaret);
+    getSelectionStore(hostRef.current).set({ anchor: initialCaret, head: initialCaret });
+    const block = Array.from(page.querySelectorAll<HTMLElement>('[data-el-id]')).find((el) => el.dataset.elId === initialCaret.elementId);
+    block?.scrollIntoView?.({ block: 'center' });
+  }, [initialCaret]);
 
   // Native listeners: React's onBeforeInput is not the DOM `beforeinput` event.
   useEffect(() => {

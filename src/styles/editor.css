@@ -69,3 +69,45 @@
 }
 
 .wui-style-picker { font: 13px system-ui, sans-serif; }
+
+/* ---- Page view: read-only sheets drawn from the layout engine ---- */
+.wui-pageview {
+  position: relative;
+  overflow: auto;
+  height: 100%;
+  background: var(--wui-bg, #f4f4f2);
+  padding: 24px 16px 96px;
+  box-sizing: border-box;
+  text-align: center;
+}
+.wui-pageview-note { color: rgba(0, 0, 0, 0.5); font: 14px system-ui, sans-serif; }
+.wui-sheet {
+  position: relative;
+  display: block;
+  box-sizing: border-box;
+  margin: 0 auto 20px;
+  background: var(--wui-paper, #fff);
+  color: var(--wui-ink, #111);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  text-align: left;
+  overflow: hidden;
+  font-kerning: none;
+  font-variant-ligatures: none;
+  font-synthesis: none;
+  letter-spacing: 0;
+}
+.wui-pl { position: absolute; white-space: pre; cursor: text; font-family: "Courier Prime", "Courier New", Courier, monospace; }
+.wui-pl:hover { background: rgba(37, 99, 235, 0.07); }
+.wui-pageno {
+  position: absolute;
+  white-space: pre;
+  font: 12pt "Courier Prime", "Courier New", Courier, monospace;
+}
+
+@media print {
+  @page { size: letter; margin: 0; }
+  .wui-pageview { overflow: visible; height: auto; padding: 0; background: none; }
+  .wui-sheet { margin: 0; box-shadow: none; break-after: page; break-inside: avoid; }
+  .wui-sheet:last-child { break-after: auto; }
+  .wui-pl:hover { background: none; }
+}

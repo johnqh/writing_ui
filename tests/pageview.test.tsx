@@ -1,0 +1,97 @@
+import { act, cleanup, fireEvent, render, renderHook, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createMemoryHost, type MemoryHost, type SeedElement } from '../demo/memory-host';
+import { PageView } from '../src/PageView';
+import { useLayout } from '../src/useLayout';
+
+vi.mock('../src/layout-engine', async (orig) => {
+  const m = await orig<typeof import('../src/layout-engine')>();
+  return { ...m, layoutDocument: vi.fn(m.layoutDocument) };
+});
+import { layoutDocument } from '../src/layout-engine';
+const layoutSpy = vi.mocked(layoutDocument);
+
+let host: MemoryHost;
+afterEach(() => {
+  cleanup();
+  host?.dispose();
+  layoutSpy.mockClear();
+});
+
+function longScript(scenes: number): SeedElement[] {
+  const out: SeedElement[] = [];
+  for (let i = 0; i < scenes; i++) {
+    out.push({ style: 'st_scene_heading', text: `int. room ${i} - day` });
+    out.push({ style: 'st_action', text: 'The rain keeps falling on the empty street while the neon sign flickers, and somebody far away starts to sing an old song nobody remembers.' });
+    out.push({ style: 'st_character', text: 'Maya' });
+    out.push({ style: 'st_dialogue', text: 'Twelve drafts. Not one of them knows how it ends, and I am running out of coffee and patience.' });
+  }
+  return out;
+}
+
+describe('PageView', () => {
+  it('draws the engine pages as sheets, one absolutely positioned element per line, page number from page 2', async () => {
+    host = createMemoryHost({ seed: longScript(12) });
+    const r = render(<PageView host={host} />);
+    await waitFor(() => expect(r.container.querySelectorAll('.wui-sheet').length).toBeGreaterThan(1));
+    const sheets = [...r.container.querySelectorAll<HTMLElement>('.wui-sheet')];
+    expect(sheets[0]!.style.width).toBe('8.5in');
+    expect(sheets[0]!.style.height).toBe('11in');
+    expect(sheets[0]!.querySelector('[data-testid="page-number"]')).toBeNull();
+    expect(sheets[1]!.querySelector('[data-testid="page-number"]')!.textContent).toBe('2.');
+    expect(sheets[0]!.querySelectorAll('.wui-pl').length).toBeLessThanOrEqual(54);
+    const line = sheets[0]!.querySelector<HTMLElement>('.wui-pl')!;
+    expect(line.style.left).toBe('1.5in'); // scene heading at the 1.5 in left margin
+    expect(line.textContent).toBe('INT. ROOM 0 - DAY');
+  });
+
+  it('clicking a line asks to edit that element at an offset inside the line', async () => {
+    host = createMemoryHost({ seed: longScript(2) });
+    const onRequestEdit = vi.fn();
+    const r = render(<PageView host={host} onRequestEdit={onRequestEdit} />);
+    await waitFor(() => expect(r.container.querySelector('.wui-pl')).not.toBeNull());
+    const el = r.container.querySelectorAll<HTMLElement>('.wui-pl')[1]!; // first action line
+    fireEvent.click(el, { clientX: 0 });
+    expect(onRequestEdit).toHaveBeenCalledTimes(1);
+    const [id, offset] = onRequestEdit.mock.calls[0]!;
+    expect(id).toBe(el.dataset.elId);
+    expect(offset).toBeGreaterThanOrEqual(Number(el.dataset.start));
+    expect(offset).toBeLessThanOrEqual(Number(el.dataset.end));
+  });
+});
+
+describe('useLayout', () => {
+  it('debounces bursts of edits into one recompute and skips notifications that change nothing', async () => {
+    host = createMemoryHost();
+    const { result } = renderHook(() => useLayout(host, { debounceMs: 60 }));
+    expect(result.current.status).toBe('loading');
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    const first = result.current.pages;
+    expect(result.current.pageCount).toBe(1);
+    expect(layoutSpy).toHaveBeenCalledTimes(1);
+
+    const id = host.model.elementAt(1).id;
+    for (let i = 0; i < 3; i++) {
+      act(() => void host.execute([{ id: 'text.insert', params: { at: { elementId: id, offset: 0 }, text: 'x' } }]));
+    }
+    expect(result.current.status).toBe('stale');
+    expect(layoutSpy).toHaveBeenCalledTimes(1); // nothing yet: trailing debounce
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+    expect(layoutSpy).toHaveBeenCalledTimes(2); // three edits, one layout
+    expect(result.current.pages).not.toBe(first);
+    expect(result.current.pages[0]!.lines.some((l) => l.runs.some((r) => r.text.startsWith('xxxA single')))).toBe(true);
+
+    // A notification that moved no element version does not re-run the layout.
+    const settled = result.current.pages;
+    const listeners: Array<(b: unknown) => void> = [];
+    const quiet = { ...host, model: host.model, subscribe: (l: (b: unknown) => void) => (listeners.push(l), () => {}) } as unknown as MemoryHost;
+    const quietHook = renderHook(() => useLayout(quiet, { debounceMs: 20 }));
+    await waitFor(() => expect(quietHook.result.current.status).toBe('ready'));
+    const calls = layoutSpy.mock.calls.length;
+    act(() => listeners.forEach((l) => l({ changes: [{ kind: 'notes', ids: [] }], origin: null, local: true })));
+    await waitFor(() => expect(quietHook.result.current.status).toBe('ready'));
+    await new Promise((r) => setTimeout(r, 60));
+    expect(layoutSpy.mock.calls.length).toBe(calls);
+    expect(result.current.pages).toBe(settled);
+  });
+});
