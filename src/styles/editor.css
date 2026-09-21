@@ -51,6 +51,21 @@
   user-select: none;
   pointer-events: none;
 }
+/* Dual dialogue is drawn as two stacked blocks here (side by side only in the page view), marked with a badge on each cue. */
+.wui-el[data-dual] { box-shadow: inset 3px 0 0 rgba(124, 58, 237, 0.35); }
+.wui-el[data-dual][data-role="character"]::after {
+  content: "dual " attr(data-dual);
+  position: absolute;
+  right: 0;
+  top: 0;
+  font: 600 10px/1.4 system-ui, sans-serif;
+  color: #6d28d9;
+  background: #ede9fe;
+  border-radius: 3px;
+  padding: 0 4px;
+  user-select: none;
+  pointer-events: none;
+}
 .wui-el.wui-omitted { opacity: 0.45; text-decoration: line-through; }
 
 .wui-el[data-placeholder]:empty::before,

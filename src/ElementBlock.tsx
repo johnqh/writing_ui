@@ -50,6 +50,7 @@ function ElementBlockImpl({ model, id, linesPerInch, placeholder, sceneNum }: El
       data-style={view.style}
       data-role={rs.role}
       {...(sceneNum ? { 'data-scene-num': sceneNum } : {})}
+      {...(view.dual ? { 'data-dual': view.dual.side } : {})}
       {...(placeholder && empty ? { 'data-placeholder': placeholder, 'data-empty': '' } : {})}
       style={blockStyle(rs, linesPerInch)}
     >
