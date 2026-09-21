@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { assignNumbers, formatNumberLabel, resolveStyle } from '@sudobility/writing_core';
 import { readDomSelection, writeDomSelection } from './dom-positions';
 import { ElementBlock } from './ElementBlock';
 import { pageGeometry } from './geometry';
@@ -185,6 +186,17 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
   const model = host.model;
   const geo = pageGeometry(model);
   const elements = model.elements();
+  // Auto scene numbers for the left gutter, only while scene numbering is enabled in the template.
+  const sceneNums = (() => {
+    const out = new Map<string, string>();
+    const t = model.template();
+    if (!t.styles.some((st) => st.id === t.sceneNumbering.styleId)) return out;
+    if (!resolveStyle(t, t.sceneNumbering.styleId).numbering?.enabled) return out;
+    for (const [id, a] of assignNumbers(model).labels) {
+      if (model.element(id)?.role === 'sceneHeading' && a.label.custom !== '') out.set(String(id), formatNumberLabel(a.label));
+    }
+    return out;
+  })();
   const only = elements.length === 1;
 
   return (
@@ -216,6 +228,7 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
                 vkey={`${model.textVersion(v.id)}.${model.attrsVersion(v.id)}.${epoch.current}`}
                 linesPerInch={geo.linesPerInch}
                 frozen={composingId.current === id}
+                sceneNum={sceneNums.get(id) ?? null}
                 {...(only ? { placeholder } : {})}
               />
             );

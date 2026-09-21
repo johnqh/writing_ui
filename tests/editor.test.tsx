@@ -275,3 +275,12 @@ describe('remote cursors and local cursor', () => {
     expect(host.lastCursor).toEqual({ anchor: at(3, 2), head: at(3, 5) });
   });
 });
+
+describe('scene number gutter', () => {
+  it('marks scene headings with their number when scene numbering is on', () => {
+    const r = mount();
+    expect(r.container.querySelector('[data-scene-num]')).toBeNull();
+    act(() => void host.execute([{ id: 'template.setSceneNumbering', params: { mode: 'both' } }]));
+    expect(r.container.querySelector('[data-scene-num]')?.getAttribute('data-scene-num')).toBe('1');
+  });
+});

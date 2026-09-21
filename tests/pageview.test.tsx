@@ -37,12 +37,35 @@ describe('PageView', () => {
     const sheets = [...r.container.querySelectorAll<HTMLElement>('.wui-sheet')];
     expect(sheets[0]!.style.width).toBe('8.5in');
     expect(sheets[0]!.style.height).toBe('11in');
-    expect(sheets[0]!.querySelector('[data-testid="page-number"]')).toBeNull();
-    expect(sheets[1]!.querySelector('[data-testid="page-number"]')!.textContent).toBe('2.');
+    expect(sheets[0]!.querySelector('[data-deco="header"]')).toBeNull();
+    expect(sheets[1]!.querySelector('[data-deco="header"]')!.textContent).toBe('2.');
     expect(sheets[0]!.querySelectorAll('.wui-pl').length).toBeLessThanOrEqual(54);
     const line = sheets[0]!.querySelector<HTMLElement>('.wui-pl')!;
     expect(line.style.left).toBe('1.5in'); // scene heading at the 1.5 in left margin
     expect(line.textContent).toBe('INT. ROOM 0 - DAY');
+  });
+
+  it('draws the title page as an unnumbered first sheet, footer text from page 2 and scene numbers in the margins', async () => {
+    host = createMemoryHost({ seed: longScript(12) });
+    const run = (id: string, params: unknown) => act(() => void host.execute([{ id, params }]));
+    run('title.setField', { field: 'title', text: 'The Night Train' });
+    run('title.setField', { field: 'author', text: 'Jane Writer' });
+    run('template.setHeaderFooter', { which: 'footer', patch: { enabled: true, center: '{title} - {page}' } });
+    run('template.setSceneNumbering', { mode: 'both' });
+    const r = render(<PageView host={host} />);
+    await waitFor(() => expect(r.container.querySelector('[data-testid="title-page"]')).not.toBeNull());
+    const sheets = [...r.container.querySelectorAll<HTMLElement>('.wui-sheet')];
+    expect(sheets[0]!.dataset.page).toBe('title');
+    expect(sheets[0]!.textContent).toContain('THE NIGHT TRAIN');
+    expect(sheets[0]!.textContent).toContain('Jane Writer');
+    expect(sheets[0]!.querySelector('[data-deco="header"]')).toBeNull();
+    expect(sheets[1]!.dataset.page).toBe('1');
+    expect(sheets[1]!.querySelector('[data-deco="header"]')).toBeNull();
+    expect(sheets[2]!.querySelector('[data-deco="header"]')!.textContent).toBe('2.');
+    expect(sheets[2]!.querySelector('[data-deco="footer"]')!.textContent).toBe('The Night Train - 2');
+    const nums = [...sheets[1]!.querySelectorAll<HTMLElement>('[data-deco="sceneNumber"]')];
+    expect(nums.slice(0, 2).map((n) => `${n.dataset.slot}:${n.textContent}`)).toEqual(['left:1', 'right:1']);
+    expect(r.container.querySelector<HTMLElement>('[data-testid="page-view"]')!.dataset.pageCount).toBe(String(sheets.length - 1));
   });
 
   it('clicking a line asks to edit that element at an offset inside the line', async () => {

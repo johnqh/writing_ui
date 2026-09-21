@@ -41,6 +41,16 @@
 .wui-el.wui-hidden { opacity: 0.6; border-left: 3px solid #b8b8b0; padding-left: 6px; margin-left: -9px; }
 .wui-el.wui-nonprinting { background: repeating-linear-gradient(135deg, transparent 0 6px, rgba(0, 0, 0, 0.035) 6px 12px); }
 /* Omitted scenes stay visible but struck through and dimmed. */
+.wui-el[data-scene-num]::before {
+  content: attr(data-scene-num);
+  position: absolute;
+  right: 100%;
+  margin-right: 0.35in;
+  color: #8a8a80;
+  font-size: 0.8em;
+  user-select: none;
+  pointer-events: none;
+}
 .wui-el.wui-omitted { opacity: 0.45; text-decoration: line-through; }
 
 .wui-el[data-placeholder]:empty::before,
@@ -98,10 +108,12 @@
 }
 .wui-pl { position: absolute; white-space: pre; cursor: text; font-family: "Courier Prime", "Courier New", Courier, monospace; }
 .wui-pl:hover { background: rgba(37, 99, 235, 0.07); }
-.wui-pageno {
+.wui-deco,
+.wui-tl {
   position: absolute;
   white-space: pre;
-  font: 12pt "Courier Prime", "Courier New", Courier, monospace;
+  pointer-events: none;
+  font-family: "Courier Prime", "Courier New", Courier, monospace;
 }
 
 @media print {

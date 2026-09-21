@@ -12,9 +12,11 @@ export interface ElementBlockProps {
   /** IME composition in progress: React must leave the DOM alone. */
   frozen: boolean;
   placeholder?: string;
+  /** Auto scene number shown in the left gutter when scene numbering is on (heading elements only). */
+  sceneNum?: string | null;
 }
 
-function ElementBlockImpl({ model, id, linesPerInch, placeholder }: ElementBlockProps) {
+function ElementBlockImpl({ model, id, linesPerInch, placeholder, sceneNum }: ElementBlockProps) {
   const view = model.element(id as never);
   if (!view) return null;
   const rs = model.resolveStyle(view.id);
@@ -47,6 +49,7 @@ function ElementBlockImpl({ model, id, linesPerInch, placeholder }: ElementBlock
       {...{ [EL_ATTR]: id }}
       data-style={view.style}
       data-role={rs.role}
+      {...(sceneNum ? { 'data-scene-num': sceneNum } : {})}
       {...(placeholder && empty ? { 'data-placeholder': placeholder, 'data-empty': '' } : {})}
       style={blockStyle(rs, linesPerInch)}
     >
@@ -57,5 +60,5 @@ function ElementBlockImpl({ model, id, linesPerInch, placeholder }: ElementBlock
 
 export const ElementBlock = memo(ElementBlockImpl, (a, b) => {
   if (a.frozen && b.frozen && a.id === b.id) return true;
-  return a.id === b.id && a.model === b.model && a.vkey === b.vkey && a.linesPerInch === b.linesPerInch && a.placeholder === b.placeholder && a.frozen === b.frozen;
+  return a.id === b.id && a.model === b.model && a.vkey === b.vkey && a.linesPerInch === b.linesPerInch && a.placeholder === b.placeholder && a.sceneNum === b.sceneNum && a.frozen === b.frozen;
 });

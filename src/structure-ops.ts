@@ -1,6 +1,6 @@
 import * as Y from 'yjs';
 import {
-  defineCommand, getCommand, idSchema, registerCommand,
+  defineCommand, getCommand, idSchema, registerBuiltinCommands, registerCommand,
   type CommandSpec, type DocumentModel, type ElementId, type SceneView,
 } from '@sudobility/writing_core';
 import type { ScriptEditorHost } from './host';
@@ -42,6 +42,7 @@ function newSceneMap(): Y.Map<unknown> {
 }
 
 export function ensureStructureCommands(): void {
+  registerBuiltinCommands(); // the core now ships scene.setSynopsis itself; register it first so this fallback is skipped
   if (getCommand(SYNOPSIS_ID)) return;
   const spec = defineCommand<SynopsisParams>(
     SYNOPSIS_ID,

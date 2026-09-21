@@ -30,7 +30,7 @@ export function loadLayoutEngine(): Promise<Engine> {
   }));
 }
 
-const NON_ELEMENT_LAYOUT_KINDS = new Set(['template', 'settings', 'production', 'revisions', 'trackChanges']);
+const NON_ELEMENT_LAYOUT_KINDS = new Set(['template', 'titlePage', 'settings', 'production', 'revisions', 'trackChanges']);
 
 function signature(model: DocumentModel, epoch: number): string {
   const parts: string[] = [String(epoch)];

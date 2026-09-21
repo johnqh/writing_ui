@@ -1,4 +1,4 @@
-import type { DocLine, DocPage, GlyphRun } from '@sudobility/writing_core';
+import type { DocDecoration, DocLine, DocPage, GlyphRun } from '@sudobility/writing_core';
 import { memo, useCallback } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
 import { emuToIn } from './geometry';
@@ -75,40 +75,68 @@ const Line = memo(function Line({ line }: { line: DocLine }) {
   );
 });
 
-const Sheet = memo(function Sheet({
-  page,
-  width,
-  height,
-  numberRight,
-  numberTop,
-  lineHeight,
-}: {
-  page: DocPage;
-  width: number;
-  height: number;
-  numberRight: number;
-  numberTop: number;
-  lineHeight: number;
-}) {
+const Deco = memo(function Deco({ d }: { d: DocDecoration }) {
+  return (
+    <div
+      className={`wui-deco wui-deco-${d.kind}`}
+      data-deco={d.kind}
+      data-slot={d.slot}
+      data-text={d.text}
+      style={{
+        left: `${emuToIn(d.x)}in`,
+        top: `${emuToIn(d.y)}in`,
+        width: `${emuToIn(Math.max(d.width, 914400 / 4))}in`,
+        height: `${emuToIn(d.pitch)}in`,
+        lineHeight: `${emuToIn(d.pitch)}in`,
+      }}
+    >
+      {d.runs.map((r, i) => (
+        <span key={i} style={runCss(r, d.x)}>
+          {r.text}
+        </span>
+      ))}
+    </div>
+  );
+});
+
+/** A title-page line: positioned like a body line but not clickable (the title page is edited in its own panel). */
+const TitleLine = memo(function TitleLine({ line }: { line: DocLine }) {
+  return (
+    <div
+      className="wui-tl"
+      data-field-el={line.elementId}
+      style={{
+        left: `${emuToIn(line.x)}in`,
+        top: `${emuToIn(line.y)}in`,
+        width: `${emuToIn(Math.max(line.width, 914400 / 4))}in`,
+        height: `${emuToIn(line.pitch)}in`,
+        lineHeight: `${emuToIn(line.pitch)}in`,
+      }}
+    >
+      {line.runs.map((r, i) => (
+        <span key={i} style={runCss(r, line.x)}>
+          {r.text}
+        </span>
+      ))}
+    </div>
+  );
+});
+
+const Sheet = memo(function Sheet({ page, width, height }: { page: DocPage; width: number; height: number }) {
+  const title = page.kind === 'title';
   return (
     <section
-      className="wui-sheet"
-      data-page={page.number}
+      className={title ? 'wui-sheet wui-sheet-title' : 'wui-sheet'}
+      data-page={title ? 'title' : page.number}
+      data-testid={title ? 'title-page' : undefined}
       style={{ width: `${emuToIn(width)}in`, height: `${emuToIn(height)}in` }}
     >
-      {/* The engine does not run headers yet (spec 02 section 20): a plain "N." stands in from page 2. */}
-      {page.number > 1 && (
-        <div
-          className="wui-pageno"
-          data-testid="page-number"
-          style={{ right: `${emuToIn(width - numberRight)}in`, top: `${emuToIn(numberTop)}in`, lineHeight: `${emuToIn(lineHeight)}in` }}
-        >
-          {page.number}.
-        </div>
-      )}
-      {page.lines.map((l, i) => (
-        <Line key={`${l.elementId}:${l.lineIndexInElement}:${i}`} line={l} />
+      {page.decorations.map((d, i) => (
+        <Deco key={`${d.kind}:${d.slot}:${d.elementId ?? ''}:${i}`} d={d} />
       ))}
+      {title
+        ? page.lines.map((l, i) => <TitleLine key={`${l.elementId}:${l.lineIndexInElement}:${i}`} line={l} />)
+        : page.lines.map((l, i) => <Line key={`${l.elementId}:${l.lineIndexInElement}:${i}`} line={l} />)}
     </section>
   );
 });
@@ -135,27 +163,22 @@ export function PageView({ host, className, onRequestEdit, layout }: PageViewPro
     [onRequestEdit],
   );
 
-  const page = host.model.template().page;
   return (
     <div
       className={['wui-pageview', className].filter(Boolean).join(' ')}
       data-testid="page-view"
       data-status={status}
       data-page-count={doc?.pages.length ?? 0}
+      data-title-page={doc && doc.titlePages.length > 0 ? 'true' : 'false'}
       onClick={onClick}
     >
       {!doc && status !== 'error' && <p className="wui-pageview-note">Laying out pages…</p>}
       {status === 'error' && <p className="wui-pageview-note">Could not lay out the document{error ? `: ${error.message}` : ''}</p>}
+      {doc?.titlePages.map((p) => (
+        <Sheet key={`title-${p.index}`} page={p} width={doc.pageSize.width} height={doc.pageSize.height} />
+      ))}
       {doc?.pages.map((p) => (
-        <Sheet
-          key={p.index}
-          page={p}
-          width={doc.pageSize.width}
-          height={doc.pageSize.height}
-          numberRight={doc.pageSize.width - page.margins.right}
-          numberTop={page.headerOffset}
-          lineHeight={914400 / page.linesPerInch}
-        />
+        <Sheet key={p.index} page={p} width={doc.pageSize.width} height={doc.pageSize.height} />
       ))}
     </div>
   );
