@@ -7,3 +7,7 @@ export type {
 export { emuToIn, pageGeometry, blockStyle } from './geometry';
 export { PageView, type PageViewProps } from './PageView';
 export { useLayout, loadLayoutEngine, type UseLayoutResult, type UseLayoutOptions, type LayoutStatus } from './useLayout';
+export { Navigator, type NavigatorProps } from './Navigator';
+export { IndexCards, type IndexCardsProps } from './IndexCards';
+export { useScenes } from './useScenes';
+export { ensureStructureCommands } from './structure-ops';

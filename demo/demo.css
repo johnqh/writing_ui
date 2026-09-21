@@ -2,5 +2,8 @@ html, body, #root { height: 100%; margin: 0; }
 body { font: 14px system-ui, sans-serif; background: #f4f4f2; }
 .demo { display: flex; flex-direction: column; height: 100%; }
 .demo-bar { display: flex; gap: 12px; align-items: center; padding: 8px 16px; background: #fff; border-bottom: 1px solid #ddd; flex-wrap: wrap; }
-.demo-main { flex: 1; min-height: 0; }
+.demo-body { flex: 1; min-height: 0; display: flex; }
+.demo-side { width: 300px; flex: none; border-right: 1px solid #ddd; }
+.demo-main { flex: 1; min-width: 0; min-height: 0; }
+[role=tab][aria-selected=true] { font-weight: 700; }
 .demo-count { margin-left: auto; color: #777; }

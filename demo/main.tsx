@@ -1,11 +1,25 @@
 import { StrictMode, useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ElementStylePicker, ScriptEditor } from '../src';
-import { createMemoryHost } from './memory-host';
+import { ElementStylePicker, IndexCards, Navigator, ScriptEditor, type PlainPos } from '../src';
+import { createMemoryHost, type SeedElement } from './memory-host';
 import './demo.css';
 
+const PLACES = ['writers room - night', 'rooftop - dawn', 'diner - day', 'car - moving - night', 'stairwell - day', 'kitchen - evening', 'server room - night', 'beach - sunset'];
+const DEMO_SEED: SeedElement[] = PLACES.flatMap((p, i) => [
+  { style: 'st_scene_heading', text: `${i % 2 ? 'ext.' : 'int.'} ${p}` },
+  { style: 'st_action', text: `Scene ${i + 1}: something happens here, and somebody notices.` },
+  { style: 'st_character', text: i % 2 ? 'Jonas' : 'Maya' },
+  { style: 'st_dialogue', text: 'Twelve drafts. Not one of them knows how it ends.' },
+]);
+
 function App() {
-  const host = useMemo(() => createMemoryHost(), []);
+  const host = useMemo(() => createMemoryHost({ seed: DEMO_SEED }), []);
+  const [tab, setTab] = useState<'edit' | 'cards'>('edit');
+  const [caret, setCaret] = useState<PlainPos | null>(null);
+  const jump = (elementId: string) => {
+    setCaret({ elementId, offset: 0 });
+    setTab('edit');
+  };
   const [readOnly, setReadOnly] = useState(false);
   const [remote, setRemote] = useState(false);
   const [, force] = useState(0);
@@ -35,11 +49,20 @@ function App() {
         <label>
           <input type="checkbox" checked={remote} onChange={(e) => setRemote(e.target.checked)} /> Remote cursor
         </label>
+        <span role="tablist">
+          <button role="tab" aria-selected={tab === 'edit'} onClick={() => setTab('edit')}>Edit</button>
+          <button role="tab" aria-selected={tab === 'cards'} onClick={() => setTab('cards')}>Cards</button>
+        </span>
         <span className="demo-count">{host.model.elementCount()} elements</span>
       </header>
-      <main className="demo-main">
-        <ScriptEditor host={host} readOnly={readOnly} />
-      </main>
+      <div className="demo-body">
+        <aside className="demo-side">
+          <Navigator host={host} onJumpTo={jump} />
+        </aside>
+        <main className="demo-main">
+          {tab === 'edit' ? <ScriptEditor host={host} readOnly={readOnly} initialCaret={caret} /> : <IndexCards host={host} onOpenScene={jump} />}
+        </main>
+      </div>
     </div>
   );
 }

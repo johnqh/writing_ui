@@ -1,0 +1,35 @@
+/* Navigator and IndexCards. Neutral light styling; override with className or the --wui-* variables. */
+.wui-navigator { height: 100%; overflow-y: auto; box-sizing: border-box; background: var(--wui-nav-bg, #fff); font: 13px/1.35 system-ui, sans-serif; color: #222; }
+.wui-nav-list, .wui-cards-grid { list-style: none; margin: 0; padding: 0; }
+.wui-nav-empty { padding: 16px; color: #888; }
+.wui-nav-row { position: relative; padding: 8px 12px 8px 10px; border-left: 4px solid transparent; border-bottom: 1px solid #eee; cursor: pointer; }
+.wui-nav-row:hover { background: #f6f6f4; }
+.wui-nav-row.wui-active { background: #e8f0fe; border-left-color: #2563eb; }
+.wui-nav-row.wui-dragging, .wui-card.wui-dragging { opacity: 0.4; }
+.wui-nav-row.wui-drop-before::before, .wui-nav-row.wui-drop-after::after { content: ""; position: absolute; left: 0; right: 0; height: 3px; background: #2563eb; z-index: 1; pointer-events: none; }
+.wui-nav-row.wui-drop-before::before { top: -2px; }
+.wui-nav-row.wui-drop-after::after { bottom: -2px; }
+.wui-nav-head { display: flex; gap: 8px; align-items: baseline; }
+.wui-nav-num { flex: none; min-width: 1.6em; color: #777; font-variant-numeric: tabular-nums; }
+.wui-nav-heading { flex: 1; min-width: 0; font-weight: 600; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wui-nav-omitted { flex: none; font-size: 10px; letter-spacing: 0.04em; color: #a15c00; border: 1px solid #e0b060; border-radius: 3px; padding: 0 4px; }
+.wui-nav-row.wui-omitted .wui-nav-heading, .wui-card.wui-omitted .wui-card-heading { text-decoration: line-through; opacity: 0.6; }
+.wui-nav-synopsis { margin: 2px 0 0 calc(1.6em + 8px); color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text; }
+.wui-nav-synopsis.wui-empty, .wui-card-synopsis.wui-empty { color: #aaa; font-style: italic; }
+.wui-nav-synopsis-input { width: calc(100% - 1.6em - 8px); margin: 2px 0 0 calc(1.6em + 8px); box-sizing: border-box; font: inherit; }
+
+.wui-cards { height: 100%; overflow: auto; box-sizing: border-box; background: var(--wui-bg, #f4f4f2); padding: 12px 16px 48px; font: 13px/1.35 system-ui, sans-serif; color: #222; }
+.wui-cards-bar { display: flex; gap: 16px; align-items: center; margin-bottom: 12px; }
+.wui-cards-count { color: #777; }
+.wui-cards-bar button { margin-left: auto; }
+.wui-cards-grid { display: grid; gap: 12px; }
+.wui-card { position: relative; display: flex; flex-direction: column; gap: 6px; min-height: 130px; padding: 10px 12px; background: #fffef8; border: 1px solid #ddd8c4; border-top: 4px solid #d4c98a; border-radius: 3px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); cursor: grab; }
+.wui-card.wui-drop-before::before, .wui-card.wui-drop-after::after { content: ""; position: absolute; top: -4px; bottom: -4px; width: 4px; background: #2563eb; border-radius: 2px; pointer-events: none; }
+.wui-card.wui-drop-before::before { left: -8px; }
+.wui-card.wui-drop-after::after { right: -8px; }
+.wui-card-top { display: flex; justify-content: space-between; align-items: center; color: #777; }
+.wui-card-heading { font-weight: 700; text-transform: uppercase; cursor: text; overflow-wrap: anywhere; }
+.wui-card-synopsis { flex: 1; color: #444; cursor: text; white-space: pre-wrap; overflow-wrap: anywhere; }
+.wui-card-input { width: 100%; box-sizing: border-box; font: inherit; }
+.wui-cards-bar button { padding: 3px 12px; border: 1px solid #c9c9c4; border-radius: 4px; background: #fff; cursor: pointer; font: inherit; }
+.wui-cards-bar button:hover { background: #f0f0ec; }
