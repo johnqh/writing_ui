@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type DragEvent
 import type { SceneView } from '@sudobility/writing_core';
 import type { ScriptEditorHost } from './host';
 import { useEditorSelection } from './selection-store';
-import { moveScene, setSynopsis, type SceneDrop } from './structure-ops';
+import { moveScene, setSceneOmitted, setSynopsis, type SceneDrop } from './structure-ops';
 import { useScenes } from './useScenes';
 import './styles/structure.css';
 
@@ -31,6 +31,7 @@ interface RowProps {
   onDragOver(id: string, e: DragEvent): void;
   onDrop(id: string, e: DragEvent): void;
   onDragEnd(): void;
+  onMenu(id: string, omitted: boolean, x: number, y: number): void;
 }
 
 const Row = memo(function Row(p: RowProps) {
@@ -63,12 +64,28 @@ const Row = memo(function Row(p: RowProps) {
       onDragOver={(e) => p.onDragOver(p.id, e)}
       onDrop={(e) => p.onDrop(p.id, e)}
       onDragEnd={p.onDragEnd}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        p.onMenu(p.id, p.omitted, e.clientX, e.clientY);
+      }}
       style={p.color ? { borderLeftColor: p.color } : undefined}
     >
       <div className="wui-nav-head">
         <span className="wui-nav-num" data-testid="nav-number">{p.label}</span>
         <span className="wui-nav-heading" data-testid="nav-heading">{p.heading || '(untitled scene)'}</span>
         {p.omitted && <span className="wui-nav-omitted">OMITTED</span>}
+        <button
+          type="button"
+          className="wui-nav-omit-btn"
+          data-testid="nav-omit-btn"
+          title={p.omitted ? 'Restore scene' : 'Omit scene'}
+          onClick={(e) => {
+            e.stopPropagation();
+            p.onMenu(p.id, p.omitted, e.clientX, e.clientY);
+          }}
+        >
+          &#8943;
+        </button>
       </div>
       {editing ? (
         <input
@@ -115,6 +132,19 @@ export function Navigator({ host, onJumpTo, activeElementId, className }: Naviga
   const jumpRef = useRef(onJumpTo);
   jumpRef.current = onJumpTo;
   const dragRef = useRef<string | null>(null);
+  const [menu, setMenu] = useState<{ id: string; omitted: boolean; x: number; y: number } | null>(null);
+  const onMenu = useCallback((id: string, omitted: boolean, x: number, y: number) => setMenu({ id, omitted, x, y }), []);
+  useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(null);
+    const esc = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    window.addEventListener('click', close);
+    window.addEventListener('keydown', esc);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('keydown', esc);
+    };
+  }, [menu]);
 
   const onJump = useCallback((id: string) => jumpRef.current?.(id), []);
   const onSynopsis = useCallback((id: string, v: string) => void setSynopsis(hostRef.current, id, v), []);
@@ -178,10 +208,26 @@ export function Navigator({ host, onJumpTo, activeElementId, className }: Naviga
               onDragStart={onDragStart}
               onDragOver={onDragOver}
               onDrop={onDrop}
+              onMenu={onMenu}
               onDragEnd={clear}
             />
           ))}
         </ul>
+      )}
+      {menu && (
+        <div className="wui-nav-menu" role="menu" data-testid="nav-menu" style={{ left: menu.x, top: menu.y }} onClick={(e) => e.stopPropagation()}>
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="nav-omit"
+            onClick={() => {
+              setSceneOmitted(hostRef.current, menu.id, !menu.omitted);
+              setMenu(null);
+            }}
+          >
+            {menu.omitted ? 'Restore scene' : 'Omit scene'}
+          </button>
+        </div>
       )}
     </nav>
   );

@@ -33,3 +33,9 @@
 .wui-card-input { width: 100%; box-sizing: border-box; font: inherit; }
 .wui-cards-bar button { padding: 3px 12px; border: 1px solid #c9c9c4; border-radius: 4px; background: #fff; cursor: pointer; font: inherit; }
 .wui-cards-bar button:hover { background: #f0f0ec; }
+
+.wui-nav-omit-btn { flex: none; margin-left: auto; border: 0; background: transparent; color: #6b7280; cursor: pointer; padding: 0 4px; line-height: 1; opacity: 0; }
+.wui-nav-row:hover .wui-nav-omit-btn, .wui-nav-omit-btn:focus-visible { opacity: 1; }
+.wui-nav-menu { position: fixed; z-index: 50; background: #fff; border: 1px solid #d4d4cc; border-radius: 6px; box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15); padding: 4px; min-width: 130px; }
+.wui-nav-menu button { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 6px 10px; font: 13px system-ui, sans-serif; cursor: pointer; border-radius: 4px; }
+.wui-nav-menu button:hover { background: #f3f3ef; }

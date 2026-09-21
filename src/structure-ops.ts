@@ -112,3 +112,8 @@ export function appendScene(host: ScriptEditorHost, text = 'INT. NEW SCENE - DAY
 export function sceneSignature(s: SceneView): string {
   return `${s.id}|${s.headingText}|${s.number ?? ''}|${s.index}|${s.synopsis.plain}|${s.omitted ? 1 : 0}|${s.color ?? ''}`;
 }
+
+/** Omit or restore a whole scene (`scene.setOmitted`); returns false when the command refused. */
+export function setSceneOmitted(host: ScriptEditorHost, sceneId: string, omitted: boolean): boolean {
+  return host.execute([{ id: 'scene.setOmitted', params: { scene: sceneId, omitted } }], { kind: 'local-command' }).ok;
+}

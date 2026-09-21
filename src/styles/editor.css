@@ -66,7 +66,23 @@
   user-select: none;
   pointer-events: none;
 }
-.wui-el.wui-omitted { opacity: 0.45; text-decoration: line-through; }
+.wui-el.wui-omitted { text-decoration: line-through; }
+.wui-el.wui-omitted > span { opacity: 0.45; }
+/* An omitted scene's heading carries an OMITTED badge (out of flow, so the strike-through does not reach it). */
+.wui-el[data-omitted-heading]::after {
+  content: "OMITTED";
+  position: absolute;
+  right: 0;
+  top: 0;
+  font: 600 10px/1.4 system-ui, sans-serif;
+  color: #a15c00;
+  background: #fff4e0;
+  border: 1px solid #e0b060;
+  border-radius: 3px;
+  padding: 0 4px;
+  user-select: none;
+  pointer-events: none;
+}
 
 .wui-el[data-placeholder]:empty::before,
 .wui-el[data-placeholder]::before {
