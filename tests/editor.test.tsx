@@ -185,7 +185,7 @@ describe('input', () => {
     expect(host.model.elementAt(3).text.runs[0]!.attrs).not.toHaveProperty('b');
   });
 
-  it('paste inserts plain text and splits on newlines using the template flow', () => {
+  it('paste inserts plain text and splits on newlines', () => {
     mount();
     select([1, plain(1).length]);
     const ev = new InputEvent('beforeinput', { inputType: 'insertFromPaste', data: 'ONE\nTWO', cancelable: true, bubbles: true });
@@ -193,6 +193,75 @@ describe('input', () => {
     expect(plain(1).endsWith('ONE')).toBe(true);
     expect(plain(2)).toBe('TWO');
     expect(caret()!.head).toEqual(at(2, 3));
+    // Two consecutive all-caps lines with nothing else around them are ambiguous (could be two headings,
+    // could be a character cue with no dialogue yet), so the classifier's lookahead declines to call the
+    // first one a character cue and both stay Action — this overrides the split's own template-flow guess
+    // (Action -Enter-> Character), which is what the old, pre-classification version of this test observed.
+    expect(styleOf(1)).toBe('st_action');
+    expect(styleOf(2)).toBe('st_action');
+  });
+
+  describe('paste classification', () => {
+    // Representative excerpts in the "flat paste" shape (no blank lines between elements) that prompted
+    // this feature — plain text pasted from somewhere that doesn't preserve Fountain's blank-line
+    // convention. See src/paste-classify.ts for the two-mode design and its accepted limitation.
+    // Replaces the whole element at `elementIndex` with a (possibly multi-line) paste: the first pasted
+    // line lands in that element itself, and each following line becomes a new element right after it.
+    const pasteReplacing = (elementIndex: number, text: string) => {
+      select([elementIndex, 0], [elementIndex, plain(elementIndex).length]);
+      const ev = new InputEvent('beforeinput', { inputType: 'insertFromPaste', data: text, cancelable: true, bubbles: true });
+      act(() => void page.dispatchEvent(ev));
+    };
+
+    it('classifies a scene heading, overriding the element it replaces (Action)', () => {
+      mount();
+      pasteReplacing(1, 'INT. KITCHEN - DAY');
+      expect(plain(1)).toBe('INT. KITCHEN - DAY');
+      expect(styleOf(1)).toBe('st_scene_heading');
+    });
+
+    it('classifies a character cue followed by dialogue', () => {
+      mount();
+      pasteReplacing(1, 'MAYA\nWe need more coffee.');
+      expect(plain(1)).toBe('MAYA');
+      expect(styleOf(1)).toBe('st_character');
+      expect(plain(2)).toBe('We need more coffee.');
+      expect(styleOf(2)).toBe('st_dialogue');
+    });
+
+    it('classifies a character cue, a parenthetical, then dialogue', () => {
+      mount();
+      pasteReplacing(1, 'LEE\n(with excitement)\nWe found it!');
+      expect(plain(1)).toBe('LEE');
+      expect(styleOf(1)).toBe('st_character');
+      expect(plain(2)).toBe('(with excitement)');
+      expect(styleOf(2)).toBe('st_parenthetical');
+      expect(plain(3)).toBe('We found it!');
+      expect(styleOf(3)).toBe('st_dialogue');
+    });
+
+    it('classifies an all-caps line ending in a period as action, not a character cue', () => {
+      mount();
+      // "NOON." reads like a time-stamp aside, not a name — real character names don't end in a bare period.
+      pasteReplacing(1, 'NOON.\nThe clock on the wall has stopped.');
+      expect(plain(1)).toBe('NOON.');
+      expect(styleOf(1)).toBe('st_action');
+      expect(plain(2)).toBe('The clock on the wall has stopped.');
+      expect(styleOf(2)).toBe('st_action');
+    });
+
+    it('accepted limitation: dialogue running into action with no blank line reads as more dialogue', () => {
+      mount();
+      pasteReplacing(1, 'MOURNER #3\nHe was a good man.\nThe pallbearers carry the coffin toward the hearse.');
+      expect(plain(1)).toBe('MOURNER #3');
+      expect(styleOf(1)).toBe('st_character');
+      expect(plain(2)).toBe('He was a good man.');
+      expect(styleOf(2)).toBe('st_dialogue');
+      // This line is actually action, but nothing distinguishes it from more dialogue without a blank
+      // line or a new cue — an honest, documented limitation, not a bug. Tab/Cmd+2 fixes it up by hand.
+      expect(plain(3)).toBe('The pallbearers carry the coffin toward the hearse.');
+      expect(styleOf(3)).toBe('st_dialogue');
+    });
   });
 
   it('Tab on an empty element cycles its style; Cmd+1 applies the style with that shortcut', () => {

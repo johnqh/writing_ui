@@ -1,6 +1,7 @@
 import { registerBuiltinCommands, type BatchResult, type CommandInvocation, type DocumentModel, type ElementView, type WireDocPos } from '@sudobility/writing_core';
 import { EL_ATTR, findBlock, plainToYIndex, readDomSelection, type DomSelection } from './dom-positions';
 import { wuiDebug } from './debug';
+import { classifyPastedText, styleForRole } from './paste-classify';
 import type { PlainPos, ScriptEditorHost } from './host';
 
 registerBuiltinCommands();
@@ -174,6 +175,7 @@ export function createInputController(env: InputEnv) {
   function paste(text: string): void {
     const lines = text.split(/\r\n|\r|\n/).filter((l) => l.length > 0);
     if (lines.length === 0) return;
+    const roles = classifyPastedText(text);
     const sel = selection();
     if (!sel) return;
     const o = order(sel);
@@ -185,9 +187,11 @@ export function createInputController(env: InputEnv) {
       if (s === null) return;
       at = s;
     }
+    const createdIds: string[] = [];
     for (const [i, line] of lines.entries()) {
       const r = exec([{ id: 'text.insert', params: { at: toWire(at), text: line } }], 'local-command', group);
       if (!r.ok) break;
+      createdIds.push(at.elementId);
       at = { elementId: at.elementId, offset: at.offset + line.length };
       if (i < lines.length - 1) {
         const s = exec([{ id: 'element.split', params: { at: toWire(at) } }], 'local-command', group);
@@ -196,6 +200,16 @@ export function createInputController(env: InputEnv) {
         const head = first && first.ok ? first.selection?.head : undefined;
         if (head) at = { elementId: head.elementId, offset: 0 };
       }
+    }
+    // Tag each pasted line with a screenplay role (scene heading, character, dialogue, action, ...; see
+    // paste-classify.ts) and assign the current template's matching style, overriding whatever style the
+    // split's own template-flow logic (`enterAction`) picked for it.
+    const styles = model().template().styles;
+    for (const [i, id] of createdIds.entries()) {
+      const role = roles[i];
+      if (!role) continue;
+      const style = styleForRole(styles, role);
+      exec([{ id: 'element.setStyle', params: { elements: [id], style: style.id } }], 'local-command', group);
     }
     env.setCaret(at);
   }
