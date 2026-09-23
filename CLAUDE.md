@@ -55,6 +55,7 @@ React re-renders text nodes, which destroys the browser caret. Therefore: every 
 - Uppercase styles use CSS `text-transform`; stored text keeps its case (engine caret-mapped casing is for later).
 - Empty blocks and blocks ending in a soft return carry a `<br data-sentinel>`; position mapping ignores it.
 - Hidden-in-script styles render dimmed with a left rule, non-printing ones hatched, omitted scenes struck through.
+- `ElementStylePicker` is a bare native `<select>`: a focused, closed `<select>` responds to a plain letter keydown with the browser's own type-ahead (jumps to the first option starting with that letter, firing a real `change`), so simply focusing it (click, Tab) and then typing anywhere would otherwise silently restyle the current element. Its own `onKeyDown` blocks every key except the ones needed to operate the dropdown (`Enter`/`Escape`/`Arrow*`/`Home`/`End`/`Page*`/`Tab`/mod-combos) and returns focus to the editor instead — this is what a soak test (`screenwriter_app`'s) was seeing as "an Action element silently becoming `st_character` with no Tab key sent". See `tests/stylepicker.test.tsx`.
 
 ## Related projects
 
