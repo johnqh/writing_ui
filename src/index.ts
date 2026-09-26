@@ -11,3 +11,4 @@ export { Navigator, type NavigatorProps } from './Navigator';
 export { IndexCards, type IndexCardsProps } from './IndexCards';
 export { useScenes } from './useScenes';
 export { ensureStructureCommands } from './structure-ops';
+export { defaultSpellingPolicy, type SpellingPolicy } from './spelling';

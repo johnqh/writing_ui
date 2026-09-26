@@ -1,5 +1,5 @@
 import { registerBuiltinCommands, type BatchResult, type CommandInvocation, type DocumentModel, type ElementView, type WireDocPos } from '@sudobility/writing_core';
-import { EL_ATTR, findBlock, plainToYIndex, readDomSelection, type DomSelection } from './dom-positions';
+import { EL_ATTR, blocksOf, domPointToPlain, findBlock, plainToYIndex, readDomSelection, type DomSelection } from './dom-positions';
 import { wuiDebug } from './debug';
 import { classifyPastedText, styleForRole } from './paste-classify';
 import type { PlainPos, ScriptEditorHost } from './host';
@@ -14,6 +14,8 @@ export interface InputEnv {
   setCaret: (anchor: PlainPos | null, head?: PlainPos) => void;
   /** Force React to discard and rebuild one element's DOM (used after IME composition). */
   remount: (elementId: string) => void;
+  /** Restore the controlled DOM if a browser edit changed the block structure. */
+  resetDom: () => void;
   /** The element whose DOM the browser owns right now (IME composition); React must not touch it. */
   setComposing: (elementId: string | null) => void;
 }
@@ -294,11 +296,31 @@ export function createInputController(env: InputEnv) {
   function onBeforeInput(e: InputEvent): void {
     wuiDebug('beforeinput', { inputType: e.inputType, data: e.data ?? null });
     if (composing || e.isComposing) return; // the browser owns the composing element
+    if (env.readOnly()) { e.preventDefault(); return; }
+    // Non-cancelable native edits must be reconciled once, after the browser changes the DOM.
+    if (!e.cancelable) return;
+    if (e.inputType === 'insertReplacementText') {
+      const root = env.root();
+      if (!root) return;
+      const targets = e.getTargetRanges?.() ?? [];
+      const target = targets[0];
+      const anchor = target ? domPointToPlain(root, target.startContainer, target.startOffset) : null;
+      const head = target ? domPointToPlain(root, target.endContainer, target.endOffset) : null;
+      const sel = target ? (anchor && head ? { anchor, head } : null) : readDomSelection(root);
+      const data = e.data ?? e.dataTransfer?.getData('text/plain');
+      // Some browsers omit the target/data, or leave the caret outside the corrected word.
+      // Let them finish and read the actual edit in onInput; never insert a guess at the caret.
+      if (targets.length > 1 || !sel || data == null) return;
+      const o = order(sel);
+      if (o.collapsed || o.from.elementId !== o.to.elementId) return;
+      e.preventDefault();
+      const res = exec([{ id: 'text.replaceRange', params: { range: range(o.from, o.to), text: data } }], 'local-command');
+      if (res.ok) env.setCaret({ elementId: o.from.elementId, offset: o.from.offset + data.length });
+      return;
+    }
     e.preventDefault();
-    if (env.readOnly()) return;
     switch (e.inputType) {
-      case 'insertText':
-      case 'insertReplacementText': {
+      case 'insertText': {
         const data = e.data ?? e.dataTransfer?.getData('text/plain') ?? '';
         if (data) insertText(data);
         return;
@@ -343,8 +365,54 @@ export function createInputController(env: InputEnv) {
       case 'formatUnderline':
         return toggleMark('u');
       default:
-        return; // drag/drop, spelling, other formats: not supported, and the DOM stays untouched
+        return; // drag/drop and other formats: not supported, and the DOM stays untouched
     }
+  }
+
+  /**
+   * Native spelling can bypass beforeinput or make it non-cancelable. Reconcile only an in-block
+   * text edit, through the usual command/undo/sync path, then rebuild the browser-mutated block.
+   * IME owns its DOM until compositionend. Unknown structural edits are reverted, never guessed.
+   */
+  function onInput(e: InputEvent): void {
+    if (composing || e.isComposing) return;
+    const root = env.root();
+    if (!root) return;
+    const blocks = blocksOf(root);
+    const elements = model().elements();
+    if (blocks.length !== elements.length || root.childNodes.length !== blocks.length ||
+        blocks.some((b, i) => b.getAttribute(EL_ATTR) !== String(elements[i]!.id))) {
+      env.resetDom();
+      return;
+    }
+    const changed = blocks.flatMap((block, i) => {
+      const view = elements[i]!;
+      const text = block.textContent ?? '';
+      return text === view.text.plain ? [] : [{ view, text }];
+    });
+    if (!changed.length) return;
+    const sel = readDomSelection(root);
+    // Discard browser-created text nodes even if the command below is refused.
+    for (const { view } of changed) env.remount(String(view.id));
+    if (env.readOnly() || changed.length !== 1 ||
+        (e.inputType !== 'insertReplacementText' && e.inputType !== 'insertText')) return;
+    const { view, text } = changed[0]!;
+    const before = view.text.plain;
+    let start = 0;
+    while (start < before.length && start < text.length && before[start] === text[start]) start++;
+    // A diff must not split a UTF-16 surrogate pair.
+    if (start > 0 && /[\uDC00-\uDFFF]/.test(before[start] ?? text[start] ?? '')) start--;
+    let suffix = 0;
+    while (suffix < before.length - start && suffix < text.length - start &&
+           before[before.length - suffix - 1] === text[text.length - suffix - 1]) suffix++;
+    if (suffix > 0 && /[\uDC00-\uDFFF]/.test(before[before.length - suffix]!)) suffix--;
+    const from = { elementId: String(view.id), offset: start };
+    const to = { elementId: String(view.id), offset: before.length - suffix };
+    const replacement = text.slice(start, text.length - suffix);
+    const res = exec([{ id: 'text.replaceRange', params: { range: range(from, to), text: replacement } }], 'local-command');
+    if (!res.ok) { env.setCaret(from); return; }
+    if (sel) env.setCaret(sel.anchor, sel.head);
+    else env.setCaret({ elementId: from.elementId, offset: start + replacement.length });
   }
 
   function insertSoftReturn(): void {
@@ -420,7 +488,7 @@ export function createInputController(env: InputEnv) {
     env.setCaret({ elementId: id, offset: c.from.offset + composed.length });
   }
 
-  return { onBeforeInput, onKeyDown, onCompositionStart, onCompositionEnd, EL_ATTR };
+  return { onBeforeInput, onInput, onKeyDown, onCompositionStart, onCompositionEnd, EL_ATTR };
 }
 
 export type InputController = ReturnType<typeof createInputController>;

@@ -2,6 +2,7 @@ import { memo, type ReactNode } from 'react';
 import { elementRevisionMarks, type DocumentModel } from '@sudobility/writing_core';
 import { EL_ATTR } from './dom-positions';
 import { blockStyle, runStyle } from './geometry';
+import { defaultSpellingPolicy, type SpellingPolicy } from './spelling';
 
 export interface ElementBlockProps {
   model: DocumentModel;
@@ -14,9 +15,11 @@ export interface ElementBlockProps {
   placeholder?: string;
   /** Auto scene number shown in the left gutter when scene numbering is on (heading elements only). */
   sceneNum?: string | null;
+  spellCheck?: boolean;
+  spellingPolicy?: SpellingPolicy;
 }
 
-function ElementBlockImpl({ model, id, linesPerInch, placeholder, sceneNum }: ElementBlockProps) {
+function ElementBlockImpl({ model, id, linesPerInch, placeholder, sceneNum, spellCheck = true, spellingPolicy = defaultSpellingPolicy }: ElementBlockProps) {
   const view = model.element(id as never);
   if (!view) return null;
   const rs = model.resolveStyle(view.id);
@@ -50,7 +53,7 @@ function ElementBlockImpl({ model, id, linesPerInch, placeholder, sceneNum }: El
   const children: ReactNode[] = text.runs.map((run, i) => {
     const st = runStyle(run.attrs as Record<string, unknown>);
     return (
-      <span key={i} style={st}>
+      <span key={i} style={st} spellCheck={run.attrs.nospell === true ? false : undefined} lang={typeof run.attrs.lang === 'string' ? run.attrs.lang : undefined}>
         {run.text}
       </span>
     );
@@ -64,6 +67,7 @@ function ElementBlockImpl({ model, id, linesPerInch, placeholder, sceneNum }: El
       {...{ [EL_ATTR]: id }}
       data-style={view.style}
       data-role={rs.role}
+      spellCheck={spellCheck && spellingPolicy.script(rs.role)}
       {...(sceneNum ? { 'data-scene-num': sceneNum } : {})}
       {...(omitted && rs.role === 'sceneHeading' ? { 'data-omitted-heading': '' } : {})}
       {...(view.dual ? { 'data-dual': view.dual.side } : {})}
@@ -78,5 +82,5 @@ function ElementBlockImpl({ model, id, linesPerInch, placeholder, sceneNum }: El
 
 export const ElementBlock = memo(ElementBlockImpl, (a, b) => {
   if (a.frozen && b.frozen && a.id === b.id) return true;
-  return a.id === b.id && a.model === b.model && a.vkey === b.vkey && a.linesPerInch === b.linesPerInch && a.placeholder === b.placeholder && a.sceneNum === b.sceneNum && a.frozen === b.frozen;
+  return a.id === b.id && a.model === b.model && a.vkey === b.vkey && a.linesPerInch === b.linesPerInch && a.placeholder === b.placeholder && a.sceneNum === b.sceneNum && a.frozen === b.frozen && a.spellCheck === b.spellCheck && a.spellingPolicy === b.spellingPolicy;
 });

@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
 import type { ScriptEditorHost } from './host';
+import { defaultSpellingPolicy } from './spelling';
 import { appendScene, moveScene, setHeadingText, setSynopsis, type SceneDrop } from './structure-ops';
 import { useScenes } from './useScenes';
 import './styles/structure.css';
@@ -19,6 +20,7 @@ interface CardProps {
   id: string;
   label: string;
   heading: string;
+  headingSpellCheck: boolean;
   synopsis: string;
   omitted: boolean;
   color: string | null;
@@ -81,6 +83,8 @@ const Card = memo(function Card(p: CardProps) {
       </div>
       {field === 'heading' ? (
         <input
+          spellCheck={p.headingSpellCheck}
+          autoCorrect="off"
           className="wui-card-input"
           aria-label="Scene heading"
           data-testid="card-heading-input"
@@ -99,6 +103,8 @@ const Card = memo(function Card(p: CardProps) {
       )}
       {field === 'synopsis' ? (
         <textarea
+          spellCheck
+          autoCorrect="off"
           className="wui-card-input wui-card-synopsis-input"
           aria-label="Synopsis"
           data-testid="card-synopsis-input"
@@ -204,6 +210,7 @@ export function IndexCards({ host, cardsAcross = 4, onOpenScene, className }: In
         {scenes.map((s) => (
           <Card
             key={s.id}
+            headingSpellCheck={(() => { const heading = host.model.element(s.id); return !!heading && defaultSpellingPolicy.script(host.model.resolveStyle(heading.id).role); })()}
             id={s.id}
             label={s.number ?? (s.index >= 0 ? String(s.index + 1) : '')}
             heading={s.headingText}

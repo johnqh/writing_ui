@@ -89,6 +89,8 @@ const Row = memo(function Row(p: RowProps) {
       </div>
       {editing ? (
         <input
+          spellCheck
+          autoCorrect="off"
           className="wui-nav-synopsis-input"
           aria-label="Synopsis"
           data-testid="nav-synopsis-input"

@@ -7,11 +7,15 @@ import type { EditorCursor, PlainPos, RemoteCursorInfo, ScriptEditorHost } from 
 import { createInputController } from './input';
 import { RemoteCursors } from './RemoteCursors';
 import { getSelectionStore } from './selection-store';
+import { defaultSpellingPolicy, type SpellingPolicy } from './spelling';
 import './styles/editor.css';
 
 export interface ScriptEditorProps {
   host: ScriptEditorHost;
   readOnly?: boolean;
+  /** Native spelling suggestions, without automatic correction. */
+  spellCheck?: boolean;
+  spellingPolicy?: SpellingPolicy;
   className?: string;
   /** Shown in an empty document. */
   placeholder?: string;
@@ -26,8 +30,9 @@ const CURSOR_THROTTLE_MS = 100;
  * into a `writing_core` command, and the DOM is re-rendered from the read model. The caret is restored after
  * every render from `pendingSel` (see CLAUDE.md, "caret restoration rule").
  */
-export function ScriptEditor({ host, readOnly = false, className, placeholder = 'Start writing…', initialCaret = null }: ScriptEditorProps) {
+export function ScriptEditor({ host, readOnly = false, className, placeholder = 'Start writing…', initialCaret = null, spellCheck = true, spellingPolicy = defaultSpellingPolicy }: ScriptEditorProps) {
   const [, bump] = useReducer((n: number) => n + 1, 0);
+  const [domEpoch, resetDom] = useReducer((n: number) => n + 1, 0);
   const [geoTick, bumpGeo] = useReducer((n: number) => n + 1, 0);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const pageRef = useRef<HTMLDivElement | null>(null);
@@ -57,6 +62,7 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
           nonces.current.set(id, (nonces.current.get(id) ?? 0) + 1);
           bump();
         },
+        resetDom,
         setComposing: (id) => {
           composingId.current = id;
         },
@@ -82,7 +88,7 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
       unsub();
       unsubPresence?.();
     };
-  }, [host]);
+  }, [host, nodes.page]);
 
   // Caret survival: after React commits, put the DOM selection back where the model says it is.
   useLayoutEffect(() => {
@@ -110,20 +116,23 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
     const page = pageRef.current;
     if (!page) return;
     const onBI = (e: Event) => controller.onBeforeInput(e as InputEvent);
+    const onInput = (e: Event) => controller.onInput(e as InputEvent);
     const onKD = (e: Event) => controller.onKeyDown(e as KeyboardEvent);
     const onCS = () => controller.onCompositionStart();
     const onCE = (e: Event) => controller.onCompositionEnd(e as CompositionEvent);
     page.addEventListener('beforeinput', onBI);
+    page.addEventListener('input', onInput);
     page.addEventListener('keydown', onKD);
     page.addEventListener('compositionstart', onCS);
     page.addEventListener('compositionend', onCE);
     return () => {
       page.removeEventListener('beforeinput', onBI);
+      page.removeEventListener('input', onInput);
       page.removeEventListener('keydown', onKD);
       page.removeEventListener('compositionstart', onCS);
       page.removeEventListener('compositionend', onCE);
     };
-  }, [controller]);
+  }, [controller, nodes.page]);
 
   // Publish the local selection (throttled) and tell the undo manager when the caret changes element.
   useEffect(() => {
@@ -156,7 +165,7 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
       if (timer) clearTimeout(timer);
       if (store.focusEditor) store.focusEditor = null;
     };
-  }, [host]);
+  }, [host, nodes.page]);
 
   // Layout changes move remote carets.
   useEffect(() => {
@@ -204,6 +213,7 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
   return (
     <div ref={setContainer} className={['wui-editor', className].filter(Boolean).join(' ')} data-testid="script-editor">
       <div
+        key={domEpoch}
         ref={setPage}
         className="wui-page"
         role="textbox"
@@ -211,7 +221,9 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
         aria-readonly={readOnly}
         contentEditable={!readOnly}
         suppressContentEditableWarning
-        spellCheck={false}
+        spellCheck={spellCheck && !readOnly}
+        autoCorrect="off"
+        lang={model.meta().language}
         style={{ width: `${geo.textWidthIn}in` }}
       >
         {elements.length === 0 ? (
@@ -230,6 +242,8 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
                 vkey={`${model.textVersion(v.id)}.${model.attrsVersion(v.id)}.${epoch.current}.${revKey}`}
                 linesPerInch={geo.linesPerInch}
                 frozen={composingId.current === id}
+                spellCheck={spellCheck && !readOnly}
+                spellingPolicy={spellingPolicy}
                 sceneNum={sceneNums.get(id) ?? null}
                 {...(only ? { placeholder } : {})}
               />
