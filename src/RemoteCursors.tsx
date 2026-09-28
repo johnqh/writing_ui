@@ -19,7 +19,7 @@ function parseCursor(raw: unknown): EditorCursor | null {
   return { anchor: ok(c.anchor) ? c.anchor : c.head, head: c.head };
 }
 
-function caretRect(page: HTMLElement, pos: PlainPos): DOMRect | null {
+export function caretRect(page: HTMLElement, pos: PlainPos): DOMRect | null {
   const block = findBlock(page, pos.elementId);
   if (!block) return null;
   const point = plainToDomPoint(page, pos);

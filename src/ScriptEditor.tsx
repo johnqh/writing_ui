@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { assignNumbers, formatNumberLabel, resolveStyle } from '@sudobility/writing_core';
+import { assignNumbers, contextPass, formatNumberLabel, resolveStyle } from '@sudobility/writing_core';
 import { readDomSelection, writeDomSelection } from './dom-positions';
 import { ElementBlock } from './ElementBlock';
 import { pageGeometry } from './geometry';
 import type { EditorCursor, PlainPos, RemoteCursorInfo, ScriptEditorHost } from './host';
 import { createInputController } from './input';
 import { RemoteCursors } from './RemoteCursors';
+import { TypeHint } from './TypeHint';
+import { CueComplete, type CueCompletion } from './CueComplete';
 import { getSelectionStore } from './selection-store';
 import { defaultSpellingPolicy, type SpellingPolicy } from './spelling';
 import './styles/editor.css';
@@ -19,6 +21,8 @@ export interface ScriptEditorProps {
   className?: string;
   /** Shown in an empty document. */
   placeholder?: string;
+  /** The type of the line at the caret, shown in a bubble on an empty line and after the type is changed. Default on. */
+  typeHint?: boolean;
   /** Put the caret here (and focus the editor, scrolled into view) when this prop is set/changes: used when switching in from the page view. */
   initialCaret?: PlainPos | null;
 }
@@ -30,7 +34,7 @@ const CURSOR_THROTTLE_MS = 100;
  * into a `writing_core` command, and the DOM is re-rendered from the read model. The caret is restored after
  * every render from `pendingSel` (see CLAUDE.md, "caret restoration rule").
  */
-export function ScriptEditor({ host, readOnly = false, className, placeholder = 'Start writing…', initialCaret = null, spellCheck = true, spellingPolicy = defaultSpellingPolicy }: ScriptEditorProps) {
+export function ScriptEditor({ host, readOnly = false, className, placeholder = 'Start writing…', initialCaret = null, spellCheck = true, spellingPolicy = defaultSpellingPolicy, typeHint = true }: ScriptEditorProps) {
   const [, bump] = useReducer((n: number) => n + 1, 0);
   const [domEpoch, resetDom] = useReducer((n: number) => n + 1, 0);
   const [geoTick, bumpGeo] = useReducer((n: number) => n + 1, 0);
@@ -47,6 +51,9 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
   const [cursors, setCursors] = useState<ReadonlyMap<number, RemoteCursorInfo>>(host.remoteCursors);
+  const [typeFlash, setTypeFlash] = useState<{ elementId: string; n: number } | null>(null);
+  const completion = useRef<CueCompletion | null>(null);
+  const [listOpen, setListOpen] = useState(false);
 
   const controller = useMemo(
     () =>
@@ -66,6 +73,8 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
         setComposing: (id) => {
           composingId.current = id;
         },
+        typeChanged: (elementId) => setTypeFlash((f) => ({ elementId, n: (f?.n ?? 0) + 1 })),
+        completion: () => completion.current,
       }),
     [],
   );
@@ -120,12 +129,21 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
     const onKD = (e: Event) => controller.onKeyDown(e as KeyboardEvent);
     const onCS = () => controller.onCompositionStart();
     const onCE = (e: Event) => controller.onCompositionEnd(e as CompositionEvent);
+    const onCopy = (e: Event) => controller.onCopy(e as ClipboardEvent);
+    const onCut = (e: Event) => controller.onCut(e as ClipboardEvent);
+    const onPaste = (e: Event) => controller.onPaste(e as ClipboardEvent);
+    page.addEventListener('copy', onCopy);
+    page.addEventListener('cut', onCut);
+    page.addEventListener('paste', onPaste);
     page.addEventListener('beforeinput', onBI);
     page.addEventListener('input', onInput);
     page.addEventListener('keydown', onKD);
     page.addEventListener('compositionstart', onCS);
     page.addEventListener('compositionend', onCE);
     return () => {
+      page.removeEventListener('copy', onCopy);
+      page.removeEventListener('cut', onCut);
+      page.removeEventListener('paste', onPaste);
       page.removeEventListener('beforeinput', onBI);
       page.removeEventListener('input', onInput);
       page.removeEventListener('keydown', onKD);
@@ -141,6 +159,8 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
     const doc = page.ownerDocument;
     const store = getSelectionStore(hostRef.current);
     store.focusEditor = () => page.focus();
+    // The toolbar has the focus when it calls this, so the editor's DOM selection may be gone: use the last known one.
+    store.applyStyle = (styleId) => controller.applyStyle(styleId, store.get());
     let timer: ReturnType<typeof setTimeout> | null = null;
     let last: EditorCursor | null = null;
     let lastTime = 0;
@@ -164,6 +184,7 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
       doc.removeEventListener('selectionchange', onSel);
       if (timer) clearTimeout(timer);
       if (store.focusEditor) store.focusEditor = null;
+      store.applyStyle = null;
     };
   }, [host, nodes.page]);
 
@@ -206,6 +227,20 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
     }
     return out;
   })();
+  // "(CONT'D)" after a cue, as the page view and the print show it: the same character speaks again in the scene
+  // after an interruption. It is shown, not stored, so it comes and goes as the script changes around the cue.
+  const contd = (() => {
+    const out = new Set<string>();
+    const t = model.template();
+    if (!t.pagination.automaticContinueds.enabled || !t.continueds.cont) return out;
+    try {
+      for (const [id, c] of contextPass(model, t as never, assignNumbers(model)).contexts) if (c.autoContinued) out.add(String(id));
+    } catch {
+      // a template the layout cannot read: no marks, the editor still works
+    }
+    return out;
+  })();
+  const contdText = model.template().continueds.cont;
   const only = elements.length === 1;
   const revState = model.revisionState();
   const revKey = `${revState.display}:${revState.sets.length}`;
@@ -245,6 +280,7 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
                 spellCheck={spellCheck && !readOnly}
                 spellingPolicy={spellingPolicy}
                 sceneNum={sceneNums.get(id) ?? null}
+                contd={contd.has(id) ? contdText : null}
                 {...(only ? { placeholder } : {})}
               />
             );
@@ -252,6 +288,18 @@ export function ScriptEditor({ host, readOnly = false, className, placeholder = 
         )}
       </div>
       <RemoteCursors container={nodes.container} page={nodes.page} model={model} cursors={cursors} tick={geoTick} />
+      <CueComplete
+        host={host}
+        model={model}
+        container={nodes.container}
+        page={nodes.page}
+        readOnly={readOnly}
+        tick={geoTick}
+        handle={completion}
+        onAccept={(name) => controller.completeCue(name, false)}
+        onOpenChange={setListOpen}
+      />
+      {typeHint && !listOpen && <TypeHint host={host} model={model} container={nodes.container} page={nodes.page} flash={typeFlash} tick={geoTick} readOnly={readOnly} />}
     </div>
   );
 }

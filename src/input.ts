@@ -2,6 +2,10 @@ import { registerBuiltinCommands, type BatchResult, type CommandInvocation, type
 import { EL_ATTR, blocksOf, domPointToPlain, findBlock, plainToYIndex, readDomSelection, type DomSelection } from './dom-positions';
 import { wuiDebug } from './debug';
 import { classifyPastedText, styleForRole } from './paste-classify';
+import { WUI_MIME, collectSelection, readPayload, styleFor, toHtml, toPlainText, type ClipElement, type ClipPayload } from './clipboard';
+import { nextStyle } from './style-cycle';
+import { EMPTY_PARENS, beforeClosingParen, styleChange } from './parenthetical';
+import type { CueCompletion } from './CueComplete';
 import type { PlainPos, ScriptEditorHost } from './host';
 
 registerBuiltinCommands();
@@ -18,6 +22,10 @@ export interface InputEnv {
   resetDom: () => void;
   /** The element whose DOM the browser owns right now (IME composition); React must not touch it. */
   setComposing: (elementId: string | null) => void;
+  /** An element's type was changed from the keyboard (Tab, Cmd/Ctrl+number): the editor shows the type at the caret. */
+  typeChanged?: (elementId: string) => void;
+  /** The open list of character names, if one is open: it gets the keys that operate it. */
+  completion?: () => CueCompletion | null;
 }
 
 type Order = { from: PlainPos; to: PlainPos; collapsed: boolean };
@@ -108,12 +116,20 @@ export function createInputController(env: InputEnv) {
       if (s === null) return env.setCaret(null);
       at = s;
     }
+    // Inside "(quietly|)": Enter finishes the parenthetical, it does not cut its closing parenthesis off.
+    if (beforeClosingParen(model(), at)) at = { elementId: at.elementId, offset: at.offset + 1 };
     const res = exec([{ id: 'element.split', params: { at: toWire(at) } }], 'local-command', group);
     if (!res.ok) return void (o.collapsed || env.setCaret(at));
     const r = res.results[0];
     const head = r && r.ok ? r.selection?.head : undefined;
-    if (head) env.setCaret({ elementId: head.elementId, offset: 0 });
-    else env.setCaret(at);
+    if (!head) return env.setCaret(at);
+    // A new line that the template made a parenthetical starts with its pair of parentheses too.
+    const made = model().element(head.elementId as never);
+    if (made && made.role === 'parenthetical' && made.text.plain === '') {
+      const ins = exec([{ id: 'text.insert', params: { at: toWire({ elementId: head.elementId, offset: 0 }), text: EMPTY_PARENS } }], 'local-command', group);
+      if (ins.ok) return env.setCaret({ elementId: head.elementId, offset: 1 });
+    }
+    env.setCaret({ elementId: head.elementId, offset: 0 });
   }
 
   function deleteBackward(unit: 'char' | 'grapheme' | 'word'): void {
@@ -174,10 +190,11 @@ export function createInputController(env: InputEnv) {
     if (s !== undefined) env.setCaret(s);
   }
 
-  function paste(text: string): void {
+  function paste(text: string, typed?: readonly ClipElement[]): void {
     const lines = text.split(/\r\n|\r|\n/).filter((l) => l.length > 0);
     if (lines.length === 0) return;
-    const roles = classifyPastedText(text);
+    // Text copied from the editor inside one element is just text: it takes the type of where it lands.
+    const roles = typed ? [] : classifyPastedText(text);
     const sel = selection();
     if (!sel) return;
     const o = order(sel);
@@ -189,6 +206,8 @@ export function createInputController(env: InputEnv) {
       if (s === null) return;
       at = s;
     }
+    // Pasting into a line that already has text adds to that line: it keeps its type.
+    const intoText = plainLen(model().element(at.elementId as never)) > 0;
     const createdIds: string[] = [];
     for (const [i, line] of lines.entries()) {
       const r = exec([{ id: 'text.insert', params: { at: toWire(at), text: line } }], 'local-command', group);
@@ -209,11 +228,139 @@ export function createInputController(env: InputEnv) {
     const styles = model().template().styles;
     for (const [i, id] of createdIds.entries()) {
       const role = roles[i];
-      if (!role) continue;
+      if (!role || (i === 0 && intoText)) continue;
       const style = styleForRole(styles, role);
       exec([{ id: 'element.setStyle', params: { elements: [id], style: style.id } }], 'local-command', group);
     }
     env.setCaret(at);
+  }
+
+  /**
+   * Paste elements copied from the editor, each with its own type. One element (a word, a phrase, a line) is text:
+   * it goes in at the caret and takes the type of where it lands. Several are elements: they are never joined to
+   * the text around the caret, which is split off into elements of its own and keeps its type.
+   */
+  function pasteElements(payload: ClipPayload): void {
+    const els = payload.elements.filter((e, i, all) => e.text.length > 0 || (i > 0 && i < all.length - 1));
+    if (els.length === 0) return;
+    if (els.length === 1) return paste(els[0]!.text.replace(/\r\n|\r|\n/g, ' '), [els[0]!]);
+    const sel = selection();
+    if (!sel) return;
+    const o = order(sel);
+    const group = newGroup();
+    let at = o.from;
+    if (!o.collapsed) {
+      const s = deleteSelection(o, group);
+      if (s === undefined || s === null) return;
+      at = s;
+    }
+    const split = (p: PlainPos): PlainPos | null => {
+      const r = exec([{ id: 'element.split', params: { at: toWire(p) } }], 'local-command', group);
+      const first = r.ok ? r.results[0] : undefined;
+      const head = first && first.ok ? first.selection?.head : undefined;
+      return head ? { elementId: head.elementId, offset: 0 } : null;
+    };
+    const setStyle = (id: string, style: string) => exec([{ id: 'element.setStyle', params: { elements: [id], style } }], 'local-command', group);
+
+    const origin = model().element(at.elementId as never);
+    if (!origin) return;
+    const originStyle = String(origin.style);
+    const textAfter = at.offset < plainLen(origin);
+    if (at.offset > 0) {
+      const next = split(at); // the text before the caret stays where it is, in its own element
+      if (!next) return;
+      setStyle(at.elementId, originStyle);
+      at = next;
+    }
+    const styles = model().template().styles;
+    let end = at;
+    for (const [i, el] of els.entries()) {
+      const text = el.text.replace(/\r\n|\r|\n/g, ' ');
+      if (text && !exec([{ id: 'text.insert', params: { at: toWire(at), text } }], 'local-command', group).ok) break;
+      const id = at.elementId;
+      end = { elementId: id, offset: text.length };
+      const last = i === els.length - 1;
+      if (!last || textAfter) {
+        const next = split(end);
+        if (!next) break;
+        at = next;
+      }
+      // After the split: the split's own flow may have restyled the element it left behind.
+      setStyle(id, String(styleFor(styles, el).id));
+    }
+    if (textAfter) setStyle(at.elementId, originStyle); // what stood after the caret keeps its type
+    env.setCaret(end);
+  }
+
+  /** What the selection holds, put on the clipboard as text for other programs and as typed elements for the editor. */
+  function writeClipboard(e: ClipboardEvent): Order | null {
+    const sel = readSelectionOnly();
+    const data = e.clipboardData;
+    if (!sel || !data) return null;
+    const o = order(sel);
+    if (o.collapsed) return null;
+    const m = model();
+    const elements: ClipElement[] = collectSelection(m, o.from, o.to);
+    if (elements.length === 0) return null;
+    const caps = new Map<string, boolean>();
+    const ids = m.elements({ from: m.indexOf(o.from.elementId as never), to: m.indexOf(o.to.elementId as never) + 1 });
+    for (const v of ids) if (!caps.has(String(v.style))) caps.set(String(v.style), m.resolveStyle(v.id).allCaps);
+    const payload: ClipPayload = { v: 1, elements };
+    const plain = toPlainText(elements, (style) => caps.get(style) === true, m.meta().language);
+    e.preventDefault();
+    data.setData('text/plain', plain);
+    data.setData('text/html', toHtml(payload, plain));
+    try {
+      data.setData(WUI_MIME, JSON.stringify(payload));
+    } catch {
+      // a browser that refuses custom types: the html flavour carries the elements
+    }
+    return o;
+  }
+
+  function onCopy(e: ClipboardEvent): void {
+    if (composing) return;
+    writeClipboard(e);
+  }
+
+  function onCut(e: ClipboardEvent): void {
+    if (composing) return;
+    if (env.readOnly()) return void writeClipboard(e);
+    const o = writeClipboard(e);
+    if (o) deleteSelectionAndCaret(o);
+  }
+
+  /** The `paste` event, not `beforeinput`: only here does the clipboard hand back every flavour that was copied. */
+  function onPaste(e: ClipboardEvent): void {
+    if (composing) return;
+    e.preventDefault();
+    if (env.readOnly()) return;
+    const payload = readPayload(e.clipboardData);
+    if (payload) return pasteElements(payload);
+    paste(e.clipboardData?.getData('text/plain') ?? '');
+  }
+
+  /**
+   * Take a name from the list of characters: what was typed of the cue becomes the name, in capitals (a cue is shown
+   * in capitals, and stored the way it is shown). `advance` goes on to the next line, as Enter does after a cue.
+   */
+  function completeCue(name: string, advance: boolean): void {
+    const sel = readSelectionOnly();
+    if (!sel) return;
+    const m = model();
+    const view = m.element(sel.head.elementId as never);
+    if (!view) return;
+    const id = sel.head.elementId;
+    const text = name.toLocaleUpperCase(m.meta().language);
+    const group = newGroup();
+    const res = exec([{ id: 'text.replaceRange', params: { range: range({ elementId: id, offset: 0 }, { elementId: id, offset: plainLen(view) }), text } }], 'local-command', group);
+    if (!res.ok) return;
+    const end = { elementId: id, offset: text.length };
+    if (!advance) return env.setCaret(end);
+    const split = exec([{ id: 'element.split', params: { at: toWire(end) } }], 'local-command', group);
+    const first = split.ok ? split.results[0] : undefined;
+    const head = first && first.ok ? first.selection?.head : undefined;
+    env.setCaret(head ? { elementId: head.elementId, offset: 0 } : end);
   }
 
   function toggleMark(mark: 'b' | 'i' | 'u'): void {
@@ -263,16 +410,45 @@ export function createInputController(env: InputEnv) {
     env.setCaret({ elementId: now.id, offset: Math.max(0, Math.min(next, n.length)) });
   }
 
-  function tab(direction: 'tabForward' | 'tabBack'): void {
+  /**
+   * Tab / Shift+Tab: the element at the caret (every element of a selection) becomes the next / previous type in the
+   * cycle (`style-cycle.ts`), whatever it holds and wherever the caret is in it. The text and the caret stay.
+   */
+  function tab(direction: 'forward' | 'back'): void {
     const sel = readSelectionOnly();
     if (!sel) return;
+    const m = model();
     const o = order(sel);
-    const view = model().element(o.to.elementId as never);
-    if (!view) return;
-    const res = exec([{ id: 'element.cycleStyle', params: { element: view.id, direction, caretAtEnd: o.to.offset >= plainLen(view) } }], 'local-command');
-    if (!res.ok) return;
-    const created = res.effects.inserted[0];
-    env.setCaret(created ? { elementId: created, offset: 0 } : sel.anchor, created ? undefined : sel.head);
+    const head = m.element(sel.head.elementId as never);
+    if (!head) return;
+    const style = nextStyle(m.template(), String(head.style), direction);
+    if (!style) return;
+    const ids = m.elements({ from: m.indexOf(o.from.elementId as never), to: m.indexOf(o.to.elementId as never) + 1 }).map((e) => e.id);
+    if (ids.length === 0) return;
+    if (!setStyle(ids.map(String), String(style.id), sel)) return;
+    env.typeChanged?.(sel.head.elementId);
+  }
+
+  /** Set the type of elements (see `parenthetical.ts` for what comes with it) and put the caret back, or where the change put it. */
+  function setStyle(ids: string[], styleId: string, sel: DomSelection): boolean {
+    const change = styleChange(model(), ids, styleId);
+    if (!exec(change.commands, 'local-command', newGroup()).ok) return false;
+    const moved = change.carets.get(sel.head.elementId);
+    if (moved) env.setCaret(moved);
+    else env.setCaret(sel.anchor, sel.head);
+    return true;
+  }
+
+  /** The type menu: the same as choosing the type from the keyboard. Returns false when there is no selection to apply it to. */
+  function applyStyle(styleId: string, selectionOverride?: DomSelection | null): boolean {
+    const sel = selectionOverride ?? readSelectionOnly();
+    if (!sel) return false;
+    const m = model();
+    const o = order(sel);
+    const ids = m.elements({ from: m.indexOf(o.from.elementId as never), to: m.indexOf(o.to.elementId as never) + 1 }).map((e) => String(e.id));
+    if (ids.length === 0 || !setStyle(ids, styleId, sel)) return false;
+    env.typeChanged?.(sel.head.elementId);
+    return true;
   }
 
   function styleShortcut(digit: number): boolean {
@@ -286,8 +462,7 @@ export function createInputController(env: InputEnv) {
     const to = m.indexOf(o.to.elementId as never);
     const ids = m.elements({ from, to: to + 1 }).map((e) => e.id);
     if (ids.length === 0) return true;
-    const res = exec([{ id: 'element.setStyle', params: { elements: ids, style: style.id } }], 'local-command');
-    if (res.ok) env.setCaret(sel.anchor, sel.head);
+    if (setStyle(ids.map(String), String(style.id), sel)) env.typeChanged?.(sel.head.elementId);
     return true;
   }
 
@@ -430,9 +605,25 @@ export function createInputController(env: InputEnv) {
     if (env.readOnly()) return;
     const mod = e.metaKey || e.ctrlKey;
     const key = e.key;
+    const list = !mod && !e.altKey && !e.shiftKey ? env.completion?.() : null;
+    if (list) {
+      if (key === 'ArrowDown' || key === 'ArrowUp') {
+        e.preventDefault();
+        return list.move(key === 'ArrowDown' ? 1 : -1);
+      }
+      if (key === 'Escape') {
+        e.preventDefault();
+        return list.close();
+      }
+      const name = key === 'Enter' ? list.current() : null;
+      if (name) {
+        e.preventDefault();
+        return completeCue(name, true);
+      }
+    }
     if (key === 'Tab' && !mod && !e.altKey) {
       e.preventDefault();
-      return tab(e.shiftKey ? 'tabBack' : 'tabForward');
+      return tab(e.shiftKey ? 'back' : 'forward');
     }
     if (!mod || e.altKey) return;
     const lower = key.length === 1 ? key.toLowerCase() : key;
@@ -488,7 +679,7 @@ export function createInputController(env: InputEnv) {
     env.setCaret({ elementId: id, offset: c.from.offset + composed.length });
   }
 
-  return { onBeforeInput, onInput, onKeyDown, onCompositionStart, onCompositionEnd, EL_ATTR };
+  return { onBeforeInput, onInput, onKeyDown, onCompositionStart, onCompositionEnd, onCopy, onCut, onPaste, completeCue, applyStyle, EL_ATTR };
 }
 
 export type InputController = ReturnType<typeof createInputController>;

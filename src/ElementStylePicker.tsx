@@ -55,8 +55,11 @@ export function ElementStylePicker({ host, className, disabled }: ElementStylePi
   const apply = (styleId: string) => {
     wuiDebug('picker-change', { styleId, ids: ids.map(String) });
     if (!styleId || styleId === '__mixed' || ids.length === 0) return;
-    host.execute([{ id: 'element.setStyle', params: { elements: ids, style: styleId } }], { kind: 'local-command' });
-    getSelectionStore(host).focusEditor?.();
+    const store = getSelectionStore(host);
+    // Through the editor when one is mounted, so a parenthetical gets (and loses) its parentheses and the caret is
+    // put between them; on its own otherwise.
+    store.focusEditor?.();
+    if (!store.applyStyle?.(styleId)) host.execute([{ id: 'element.setStyle', params: { elements: ids, style: styleId } }], { kind: 'local-command' });
   };
 
   // Any key that is not needed to operate the dropdown itself (see SELECT_OPERATION_KEYS's own doc

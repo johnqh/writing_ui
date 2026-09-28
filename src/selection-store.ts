@@ -12,6 +12,11 @@ export class SelectionStore {
   private listeners = new Set<() => void>();
   /** Registered by the mounted ScriptEditor so a toolbar can hand focus back after acting. */
   focusEditor: (() => void) | null = null;
+  /**
+   * Registered by the mounted ScriptEditor: set the type of the selected elements the way the keyboard does (with the
+   * caret handling a parenthetical needs). A toolbar calls this instead of sending `element.setStyle` itself.
+   */
+  applyStyle: ((styleId: string) => boolean) | null = null;
 
   get = (): EditorSelection | null => this.value;
 

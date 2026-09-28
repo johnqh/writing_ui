@@ -162,3 +162,50 @@
   .wui-sheet:last-child { break-after: auto; }
   .wui-pl:hover { background: none; }
 }
+
+/* The type of the line at the caret (TypeHint.tsx): below the caret, never in the way of the text being typed. */
+.wui-type-hint {
+  position: absolute;
+  margin-top: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: #1f2937;
+  color: #fff;
+  font: 600 11px/1.5 system-ui, sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  z-index: 3;
+}
+.wui-type-hint-key { font-weight: 400; opacity: 0.7; }
+@media print { .wui-type-hint { display: none; } }
+
+/* The automatic continued mark after a cue: generated content, so it is never part of the text or the caret's way. */
+.wui-el[data-contd]::after { content: attr(data-contd); opacity: 0.55; }
+
+/* Character names while typing a cue (CueComplete.tsx). */
+.wui-cue-complete {
+  position: absolute;
+  margin: 3px 0 0;
+  padding: 3px;
+  list-style: none;
+  min-width: 160px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #d4d4d4;
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  font: 13px/1.5 system-ui, sans-serif;
+  color: #171717;
+  pointer-events: auto;
+  user-select: none;
+  z-index: 6;
+}
+.wui-cue-option { padding: 3px 9px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.wui-cue-option-active { background: #1f2937; color: #fff; }
+@media print { .wui-cue-complete { display: none; } }
